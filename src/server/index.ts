@@ -1,88 +1,132 @@
-import {
-	type Connection,
-	Server,
-	type WSMessage,
-	routePartykitRequest,
-} from "partyserver";
+import { DurableObject } from "cloudflare:workers";
 
-import type { ChatMessage, Message } from "../shared";
+export class Chat extends DurableObject {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+  }
 
-export class Chat extends Server<Env> {
-	static options = { hibernate: true };
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("Upgrade") !== "websocket") {
+      return new Response("HP Signaling Room OK");
+    }
 
-	messages = [] as ChatMessage[];
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
 
-	broadcastMessage(message: Message, exclude?: string[]) {
-		this.broadcast(JSON.stringify(message), exclude);
-	}
+    this.ctx.acceptWebSocket(server);
 
-	onStart() {
-		// this is where you can initialize things that need to be done before the server starts
-		// for example, load previous messages from a database or a service
+    const existingPeers = this.ctx.getWebSockets();
 
-		// create the messages table if it doesn't exist
-		this.ctx.storage.sql.exec(
-			`CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, user TEXT, role TEXT, content TEXT)`,
-		);
+    server.send(
+      JSON.stringify({
+        type: "joined",
+        role: "unknown",
+      })
+    );
 
-		// load the messages from the database
-		this.messages = this.ctx.storage.sql
-			.exec(`SELECT * FROM messages`)
-			.toArray() as ChatMessage[];
-	}
+    if (existingPeers.length > 0) {
+      server.send(
+        JSON.stringify({
+          type: "peer-present",
+        })
+      );
 
-	onConnect(connection: Connection) {
-		connection.send(
-			JSON.stringify({
-				type: "all",
-				messages: this.messages,
-			} satisfies Message),
-		);
-	}
+      for (const peer of existingPeers) {
+        try {
+          peer.send(
+            JSON.stringify({
+              type: "peer-joined",
+            })
+          );
+        } catch (_) {}
+      }
+    }
 
-	saveMessage(message: ChatMessage) {
-		// check if the message already exists
-		const existingMessage = this.messages.find((m) => m.id === message.id);
-		if (existingMessage) {
-			this.messages = this.messages.map((m) => {
-				if (m.id === message.id) {
-					return message;
-				}
-				return m;
-			});
-		} else {
-			this.messages.push(message);
-		}
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+    });
+  }
 
-		// Use parameterized queries to prevent SQL injection
-		this.ctx.storage.sql.exec(
-			`INSERT INTO messages (id, user, role, content) VALUES (?, ?, ?, ?)
-			 ON CONFLICT (id) DO UPDATE SET content = ?`,
-			message.id,
-			message.user,
-			message.role,
-			message.content,
-			message.content,
-		);
-	}
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    let data: any;
 
-	onMessage(connection: Connection, message: WSMessage) {
-		// let's broadcast the raw message to everyone else
-		this.broadcast(message);
+    try {
+      const text =
+        typeof message === "string"
+          ? message
+          : new TextDecoder().decode(message);
 
-		// let's update our local messages store
-		const parsed = JSON.parse(message as string) as Message;
-		if (parsed.type === "add" || parsed.type === "update") {
-			this.saveMessage(parsed);
-		}
-	}
+      data = JSON.parse(text);
+    } catch (_) {
+      return;
+    }
+
+    if (data?.type === "join") {
+      return;
+    }
+
+    for (const peer of this.ctx.getWebSockets()) {
+      if (peer === ws) continue;
+
+      try {
+        peer.send(JSON.stringify(data));
+      } catch (_) {}
+    }
+  }
+
+  async webSocketClose(ws: WebSocket) {
+    for (const peer of this.ctx.getWebSockets()) {
+      if (peer === ws) continue;
+
+      try {
+        peer.send(
+          JSON.stringify({
+            type: "peer-left",
+          })
+        );
+      } catch (_) {}
+    }
+  }
+
+  async webSocketError(ws: WebSocket) {
+    try {
+      ws.close(1011, "WebSocket error");
+    } catch (_) {}
+  }
+}
+
+interface Env {
+  Chat: DurableObjectNamespace;
 }
 
 export default {
-	async fetch(request, env) {
-		return (
-			(await routePartykitRequest(request, { ...env })) ||
-			env.ASSETS.fetch(request)
-		);
-	},
-} satisfies ExportedHandler<Env>;
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/health") {
+      return Response.json({
+        ok: true,
+        service: "HP WEB Signaling",
+        websocket: "/ws",
+      });
+    }
+
+    if (url.pathname === "/ws") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("WebSocket upgrade required", {
+          status: 426,
+        });
+      }
+
+      const roomName = url.searchParams.get("code") || "123456";
+
+      const roomId = env.Chat.idFromName(roomName);
+      const room = env.Chat.get(roomId);
+
+      return room.fetch(request);
+    }
+
+    return new Response("HP WEB Signaling Server");
+  },
+};
