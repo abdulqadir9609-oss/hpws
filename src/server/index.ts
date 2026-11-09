@@ -330,7 +330,7 @@ export class Chat extends DurableObject<Env> {
     if (
       (role !== "phone" && role !== "controller") ||
       !deviceId ||
-      !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(deviceId)
+      !isValidDeviceId(deviceId)
     ) {
       return new Response("Authenticated WebSocket ticket required", { status: 401 });
     }
