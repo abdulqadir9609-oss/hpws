@@ -1,4 +1,5 @@
 import { env, exports } from "cloudflare:workers";
+import { runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 
 const ADMIN_SECRET = "hpws-vitest-only-secret-not-production";
@@ -445,6 +446,35 @@ describe("HPWS Device Registration and Security", () => {
       });
       expect(response.status).toBe(400);
     }
+  });
+
+  it("cleans expired WebSocket tickets and admin login rate limits with the alarm", async () => {
+    const registry = env.Chat.get(
+      env.Chat.idFromName("__hp_registry_v1__")
+    );
+    const expiredTicketKey = "ws-ticket:test-expired-cleanup";
+    const expiredRateLimitKey = "admin-login:test-expired-cleanup";
+
+    await runInDurableObject(registry, async (_instance, state) => {
+      await state.storage.put(expiredTicketKey, {
+        role: "phone",
+        deviceId: "HPPHONE1",
+        expiresAt: Date.now() - 1,
+      });
+      await state.storage.put(expiredRateLimitKey, {
+        attempts: 5,
+        resetAt: Date.now() - 1,
+      });
+      await state.storage.setAlarm(Date.now() + 60_000);
+    });
+
+    const alarmRan = await runDurableObjectAlarm(registry);
+    expect(alarmRan).toBe(true);
+
+    await runInDurableObject(registry, async (_instance, state) => {
+      expect(await state.storage.get(expiredTicketKey)).toBeUndefined();
+      expect(await state.storage.get(expiredRateLimitKey)).toBeUndefined();
+    });
   });
 
   it("rate-limits repeated failed administrator logins per IP", async () => {
