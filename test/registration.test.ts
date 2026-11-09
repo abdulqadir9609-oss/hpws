@@ -46,6 +46,51 @@ async function registerDevice(device: ReturnType<typeof newDevice>) {
   return api("/api/device/register", "POST", device);
 }
 
+describe("WebRTC signaling payload validation", () => {
+  const validate = (value: unknown) =>
+    (exports as unknown as {
+      validateSignalingMessage: (input: unknown) => Record<string, unknown> | null;
+    }).validateSignalingMessage(value);
+
+  it("accepts the SDP string format sent by the HP Flutter app", () => {
+    const sdp = "v=0\\r\\no=- 123 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\n";
+    expect(validate({ type: "offer", sdp })).toEqual({ type: "offer", sdp });
+    expect(validate({ type: "answer", sdp })).toEqual({ type: "answer", sdp });
+  });
+
+  it("accepts the object SDP format used by WebRTC clients", () => {
+    const sdp = "v=0\\r\\no=- 123 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\n";
+    expect(validate({ type: "offer", sdp: { type: "offer", sdp } }))
+      .toEqual({ type: "offer", sdp });
+  });
+
+  it("accepts structured and string ICE candidates", () => {
+    const candidate = "candidate:1 1 UDP 2122260223 192.0.2.1 5000 typ host";
+    expect(validate({ type: "candidate", candidate }))
+      .toEqual({ type: "candidate", candidate });
+    expect(validate({
+      type: "candidate",
+      candidate: { candidate, sdpMid: "0", sdpMLineIndex: 0 },
+    })).toEqual({
+      type: "candidate",
+      candidate: { candidate, sdpMid: "0", sdpMLineIndex: 0 },
+    });
+  });
+
+  it("rejects malformed or oversized SDP and ICE candidate payloads", () => {
+    expect(validate({ type: "offer", sdp: "" })).toBeNull();
+    expect(validate({ type: "answer", sdp: "x".repeat(48_001) })).toBeNull();
+    expect(validate({ type: "candidate", candidate: "" })).toBeNull();
+    expect(validate({ type: "candidate", candidate: "x".repeat(8_193) })).toBeNull();
+    expect(validate({ type: "candidate", candidate: { candidate: "x", sdpMLineIndex: -1 } })).toBeNull();
+    expect(validate({ type: "candidate", candidate: { candidate: "x", sdpMLineIndex: 1.5 } })).toBeNull();
+    expect(validate({ type: "candidate", candidate: { candidate: "x", sdpMid: 7 } })).toBeNull();
+    expect(validate({ type: "join", role: "hp-app" })).toBeNull();
+    expect(validate(null)).toBeNull();
+    expect(validate([])).toBeNull();
+  });
+});
+
 describe("HPWS Device Registration and Security", () => {
   it("registers a valid device as pending", async () => {
     const device = newDevice();
