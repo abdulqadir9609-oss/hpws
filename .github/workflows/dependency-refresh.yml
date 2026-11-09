@@ -1,0 +1,50 @@
+name: Dependency Security Refresh
+
+on:
+  push:
+    branches:
+      - ci/worker-security-checks
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Upgrade vulnerable direct dependencies
+        run: |
+          npm install --save-exact nanoid@5.1.16 react-router@7.18.5
+          npm install --save-dev --save-exact vitest@4.1.12 wrangler@4.159.0
+
+      - name: Run tests and type checks
+        run: |
+          npx tsc --project test
+          npx vitest run
+          npm run check
+
+      - name: Verify npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Commit refreshed package files
+        run: |
+          if ! git diff --quiet -- package.json package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            git commit -m "security: update vulnerable npm dependencies [skip ci]"
+            git push origin HEAD:ci/worker-security-checks
+          else
+            echo "Dependency manifests are already current."
+          fi
