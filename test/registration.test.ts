@@ -1,4 +1,6 @@
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
+import { validateSignalingMessage } from "../src/server/signaling";
+
 import { runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 
@@ -47,10 +49,7 @@ async function registerDevice(device: ReturnType<typeof newDevice>) {
 }
 
 describe("WebRTC signaling payload validation", () => {
-  const validate = (value: unknown) =>
-    (exports as unknown as {
-      validateSignalingMessage: (input: unknown) => Record<string, unknown> | null;
-    }).validateSignalingMessage(value);
+  const validate = validateSignalingMessage;
 
   it("accepts the SDP string format sent by the HP Flutter app", () => {
     const sdp = "v=0\\r\\no=- 123 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\n";
