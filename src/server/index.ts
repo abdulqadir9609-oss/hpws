@@ -512,6 +512,7 @@ export class Chat extends DurableObject<Env> {
         return json({ error: result.error }, 409);
       }
 
+      const registrationStatus = result.status as PendingDevice["status"];
       const messages: Record<PendingDevice["status"], string> = {
         pending: "Waiting for administrator approval",
         approved: "Device already approved",
@@ -520,9 +521,9 @@ export class Chat extends DurableObject<Env> {
 
       return json({
         ok: true,
-        status: result.status,
-        message: messages[result.status],
-      }, result.status === "pending" ? 202 : 200);
+        status: registrationStatus,
+        message: messages[registrationStatus],
+      }, registrationStatus === "pending" ? 202 : 200);
     }
 
     // The app polls this endpoint using its locally stored proof.
