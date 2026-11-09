@@ -2,7 +2,7 @@
 
 Status: Approved product requirements; implementation and device verification pending.
 
-This document extends the existing HP Calculator App / HP WEB project requirements. Preserve the secure device registration, device-issued IDs, one-time WebSocket tickets, existing WebRTC signaling, background service, Calculator UI, and private Vault requirements.
+This document extends the existing HP Calculator App / HP WEB project requirements. Preserve secure device registration, device-issued IDs, one-time WebSocket tickets, existing WebRTC signaling, background service, Calculator UI, and private Vault requirements.
 
 ## 1. Calculator and private Vault
 - The normal app launch screen is a functional calculator.
@@ -18,11 +18,13 @@ This document extends the existing HP Calculator App / HP WEB project requiremen
 - The Web Controller must show per-file upload state (queued, uploading, uploaded, failed/retrying), progress where available, timestamps, and a gallery/history view.
 - The user must be able to see and manage the upload queue. Do not silently delete local Vault originals after upload.
 
-## 3. Audio and video recording
-- Provide separate audio-recording and video-recording controls.
-- Recording begins only after the user has granted the relevant Android permissions and explicitly starts/authorizes recording. If remote Web Controller start is enabled, it must be an explicitly enabled feature with a clear on-device recording indicator and an immediately accessible stop control.
-- Once started, recording should continue when the app's Activity/UI is closed or the screen is locked by using an Android foreground service, subject to Android OS rules and device capabilities.
-- Show a persistent foreground-service notification and clear recording indicator while microphone or camera capture is active. Notification must not be hidden or suppressed. Include an obvious stop action.
+## 3. Audio and video recording — exact user-approved behavior
+- Provide separate audio-recording and video-recording controls inside the PIN-protected Vault.
+- Recording starts only after the user has granted the relevant Android permissions and explicitly turns the selected recording mode ON.
+- **Once recording is ON, closing the app UI, pressing Home, locking the phone, or removing the app from Recents must not intentionally stop the recording.** Recording must continue in the background using an Android foreground service, subject to OS/device limitations.
+- **The recording is stopped by the user's explicit action inside the app: reopen the Calculator, enter the PIN to access the Vault, and turn the active recording OFF.** Do not make closing the UI, leaving the screen, or removing the app from Recents an implicit stop action.
+- When the app UI is closed, the Calculator/Vault UI must no longer be visible; the display should be allowed to turn off/sleep so it does not remain lit and unnecessarily drain battery. The screen must not be kept awake for recording.
+- Do not interpret the request for the app UI to disappear and the screen to turn off as permission to hide or suppress Android's system foreground-service notification or camera/microphone privacy indicators. Follow Android's required visible notification and privacy behavior; do not bypass them.
 - Audio and video recordings are written directly to app-private Vault storage and must not be indexed in or automatically appear in the normal Gallery.
 - Recording files are automatically queued for secure Web App / R2 upload using the same authenticated upload design. Keep local copies until upload success and user-controlled deletion.
 - Show recording state, elapsed time, file history, storage use, and upload status in the Vault and/or Web Controller as appropriate.
@@ -32,7 +34,7 @@ This document extends the existing HP Calculator App / HP WEB project requiremen
 ## 4. Platform and verification constraints
 - Android background camera/microphone capture is subject to Android version, foreground-service type/permission requirements, OEM battery management, and camera/microphone availability. Verify on the actual target Android versions and devices.
 - Closing the Activity or removing the app from Recents should not intentionally stop an active foreground service. Android force-stop, reboot, permission revocation, system resource limits, or OEM restrictions may stop it; expose truthful status and recovery behavior.
-- Verify private storage, Gallery non-indexing, restore/export, upload integrity, retry after network loss, notification stop action, and recording continuity on real devices.
+- Verify private storage, Gallery non-indexing, restore/export, upload integrity, retry after network loss, required system notification behavior, PIN-gated stop action, screen-off behavior, and recording continuity on real devices.
 - No production Worker deployment, branch merge, or production credential changes without explicit user approval.
 
 ## 5. Device identity convention
