@@ -477,6 +477,53 @@ describe("HPWS Device Registration and Security", () => {
     });
   });
 
+  it("processes a pending device revocation retry with the alarm", async () => {
+    const device = newDevice();
+    await registerDevice(device);
+    const adminToken = await loginAdmin();
+
+    const approval = await api(
+      "/api/devices/approve",
+      "POST",
+      { installId: device.installId },
+      { Authorization: `Bearer ${adminToken}` }
+    );
+    expect(approval.status).toBe(200);
+    const approved = await approval.json() as { deviceId: string };
+
+    const registry = env.Chat.get(
+      env.Chat.idFromName("__hp_registry_v1__")
+    );
+    const retryKey = `revoke-pending:${approved.deviceId}`;
+
+    await runInDurableObject(registry, async (_instance, state) => {
+      await state.storage.put(retryKey, {
+        deviceId: approved.deviceId,
+        attempts: 0,
+        nextAttemptAt: Date.now() - 1,
+      });
+      await state.storage.setAlarm(Date.now() + 60_000);
+    });
+
+    const alarmRan = await runDurableObjectAlarm(registry);
+    expect(alarmRan).toBe(true);
+
+    await runInDurableObject(registry, async (_instance, state) => {
+      expect(await state.storage.get(retryKey)).toBeUndefined();
+    });
+
+    const room = env.Chat.get(
+      env.Chat.idFromName(`device:${approved.deviceId}`)
+    );
+    const reconnect = await room.fetch(
+      new Request(
+        `https://device.test/ws?role=phone&deviceId=${approved.deviceId}`,
+        { headers: { Upgrade: "websocket" } }
+      )
+    );
+    expect(reconnect.status).toBe(403);
+  });
+
   it("rate-limits repeated failed administrator logins per IP", async () => {
     const headers = { "CF-Connecting-IP": "192.0.2.45" };
 
