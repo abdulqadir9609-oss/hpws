@@ -82,10 +82,11 @@ Do not store credentials in SharedPreferences, plain files, logs, notifications,
 The backend assigns stable IDs centrally:
 - Device 1: `HPPHONE1`
 - Device 2: `HPPHONE..2`
-- Device 3: `HPPHONE...3`
-- Device n (n >= 2): `HPPHONE` + n dots + n
+- Device 3: `HPPHONE..3`
+- Device 4: `HPPHONE..4`
+- Device n (n >= 2): `HPPHONE..` + n
 
-The client must treat deviceId as an opaque server-issued identifier and must not generate it.
+Exactly two dots are used for every device from number 2 onward. The client must treat deviceId as an opaque server-issued identifier and must not generate it.
 
 ## Legacy protocol removal
 
