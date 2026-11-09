@@ -148,11 +148,11 @@ function isValidDeviceId(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value === "HPPHONE1") return true;
 
-  const match = /^HPPHONE(\.{2,})([2-9]\d*)$/.exec(value);
+  const match = /^HPPHONE(\.{2,})([1-9]\d*)$/.exec(value);
   if (!match) return false;
 
   const number = Number(match[2]);
-  if (!Number.isSafeInteger(number)) return false;
+  if (!Number.isSafeInteger(number) || number < 2) return false;
 
   // Accept legacy two-dot IDs already issued before the format was finalized.
   return match[1].length === 2 || match[1].length === number;
