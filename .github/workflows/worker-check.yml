@@ -1,0 +1,35 @@
+name: Worker Checks
+
+on:
+  push:
+    branches:
+      - ci/worker-security-checks
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type-check test files
+        run: npx tsc --project test
+
+      - name: Run Worker functional tests
+        run: npx vitest run
+
+      - name: Run TypeScript and Wrangler dry-run checks
+        run: npm run check
