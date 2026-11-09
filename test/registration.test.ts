@@ -99,6 +99,11 @@ describe("HPWS Device Registration and Security", () => {
       "HPPHONE...3",
       "HPPHONE....4",
       "HPPHONE.....5",
+      "HPPHONE......6",
+      "HPPHONE.......7",
+      "HPPHONE........8",
+      "HPPHONE.........9",
+      "HPPHONE..........10",
     ];
 
     for (const deviceId of expected) {
