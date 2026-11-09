@@ -148,7 +148,7 @@ function isValidDeviceId(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value === "HPPHONE1") return true;
 
-  const match = /^HPPHONE(\\.{2,})([2-9]\\d*)$/.exec(value);
+  const match = /^HPPHONE(\.{2,})([2-9]\d*)$/.exec(value);
   if (!match) return false;
 
   const number = Number(match[2]);
