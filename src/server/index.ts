@@ -268,7 +268,7 @@ export class Chat extends DurableObject<Env> {
       const body = await bodyJson(request);
       if (
         typeof body?.deviceId !== "string" ||
-        !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(body.deviceId)
+        !isValidDeviceId(body.deviceId)
       ) {
         return json({ error: "Invalid device ID" }, 400);
       }
@@ -295,7 +295,7 @@ export class Chat extends DurableObject<Env> {
       const body = await bodyJson(request);
       if (
         typeof body?.deviceId !== "string" ||
-        !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(body.deviceId)
+        !isValidDeviceId(body.deviceId)
       ) {
         return json({ error: "Invalid device ID" }, 400);
       }
@@ -747,7 +747,7 @@ export class Chat extends DurableObject<Env> {
       const body = await bodyJson(request);
       if (
         typeof body?.deviceId !== "string" ||
-        !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(body.deviceId)
+        !isValidDeviceId(body.deviceId)
       ) {
         return json({ error: "Invalid device ID" }, 400);
       }
@@ -797,7 +797,7 @@ export class Chat extends DurableObject<Env> {
       if (
         !body ||
         typeof body.deviceId !== "string" ||
-        !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(body.deviceId) ||
+        !isValidDeviceId(body.deviceId) ||
         typeof body.token !== "string" ||
         body.token.length < 32 ||
         body.token.length > 256
@@ -837,7 +837,7 @@ export class Chat extends DurableObject<Env> {
       const body = await bodyJson(request);
       if (
         typeof body?.deviceId !== "string" ||
-        !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(body.deviceId)
+        !isValidDeviceId(body.deviceId)
       ) {
         return json({ error: "Invalid device ID" }, 400);
       }
@@ -906,7 +906,7 @@ export class Chat extends DurableObject<Env> {
         typeof body.token !== "string" ||
         body.token.length < 32 ||
         body.token.length > 256 ||
-        !/^HPPHONE(?:1|\.\.(?:[2-9]|[1-9]\d+))$/.test(body.deviceId)
+        !isValidDeviceId(body.deviceId)
       ) {
         return json({ error: "Invalid device credentials" }, 400);
       }
