@@ -143,20 +143,27 @@ export class Chat extends DurableObject<Env> {
     super(ctx, env);
   }
 
-  private async scheduleRevokeRetry(): Promise<void> {
-    const tasks = await this.ctx.storage.list<RevokeRetry>({
-      prefix: "revoke-pending:",
-    });
+  // Durable Objects have one alarm, so revocation retries and expired-ticket
+  // cleanup share a single schedule.
+  private async scheduleMaintenanceAlarm(): Promise<void> {
+    const [retries, tickets] = await Promise.all([
+      this.ctx.storage.list<RevokeRetry>({ prefix: "revoke-pending:" }),
+      this.ctx.storage.list<{ expiresAt: number }>({ prefix: "ws-ticket:" }),
+    ]);
 
-    if (tasks.size === 0) {
+    const deadlines = [
+      ...Array.from(retries.values(), (task) => task.nextAttemptAt),
+      ...Array.from(tickets.values(), (ticket) => ticket.expiresAt),
+    ];
+
+    if (deadlines.length === 0) {
       await this.ctx.storage.deleteAlarm();
       return;
     }
 
-    const nextAttemptAt = Math.min(
-      ...Array.from(tasks.values(), (task) => task.nextAttemptAt)
+    await this.ctx.storage.setAlarm(
+      Math.max(Date.now() + 1, Math.min(...deadlines))
     );
-    await this.ctx.storage.setAlarm(Math.max(Date.now() + 1, nextAttemptAt));
   }
 
   private async disconnectRevokedDevice(deviceId: string): Promise<boolean> {
@@ -180,10 +187,20 @@ export class Chat extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    const now = Date.now();
+    const tickets = await this.ctx.storage.list<{ expiresAt: number }>({
+      prefix: "ws-ticket:",
+    });
+
+    for (const [key, ticket] of tickets) {
+      if (ticket.expiresAt <= now) {
+        await this.ctx.storage.delete(key);
+      }
+    }
+
     const tasks = await this.ctx.storage.list<RevokeRetry>({
       prefix: "revoke-pending:",
     });
-    const now = Date.now();
 
     for (const [key, task] of tasks) {
       if (task.nextAttemptAt > now) continue;
@@ -203,7 +220,7 @@ export class Chat extends DurableObject<Env> {
       } satisfies RevokeRetry);
     }
 
-    await this.scheduleRevokeRetry();
+    await this.scheduleMaintenanceAlarm();
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -710,7 +727,7 @@ export class Chat extends DurableObject<Env> {
         attempts: 0,
         nextAttemptAt: Date.now() + 1000,
       } satisfies RevokeRetry);
-      await this.scheduleRevokeRetry();
+      await this.scheduleMaintenanceAlarm();
 
       const disconnected = await this.disconnectRevokedDevice(body.deviceId);
       if (!disconnected) {
@@ -724,7 +741,7 @@ export class Chat extends DurableObject<Env> {
       }
 
       await this.ctx.storage.delete(retryKey);
-      await this.scheduleRevokeRetry();
+      await this.scheduleMaintenanceAlarm();
 
       return json({
         ok: true,
@@ -766,6 +783,7 @@ export class Chat extends DurableObject<Env> {
         deviceId: record.deviceId,
         expiresAt: Date.now() + 60_000,
       });
+      await this.scheduleMaintenanceAlarm();
 
       record.lastSeen = Date.now();
       await this.ctx.storage.put(`device:${record.deviceId}`, record);
@@ -798,6 +816,7 @@ export class Chat extends DurableObject<Env> {
         deviceId: record.deviceId,
         expiresAt: Date.now() + 60_000,
       });
+      await this.scheduleMaintenanceAlarm();
 
       return json({ ticket, expiresIn: 60 });
     }
