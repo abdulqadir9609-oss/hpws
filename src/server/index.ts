@@ -23,6 +23,12 @@ type DeviceRecord = {
   revoked: boolean;
 };
 
+type RevokeRetry = {
+  deviceId: string;
+  attempts: number;
+  nextAttemptAt: number;
+};
+
 const encoder = new TextEncoder();
 
 function json(data: unknown, status = 200): Response {
@@ -135,6 +141,69 @@ function deviceId(number: number): string {
 export class Chat extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+  }
+
+  private async scheduleRevokeRetry(): Promise<void> {
+    const tasks = await this.ctx.storage.list<RevokeRetry>({
+      prefix: "revoke-pending:",
+    });
+
+    if (tasks.size === 0) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+
+    const nextAttemptAt = Math.min(
+      ...Array.from(tasks.values(), (task) => task.nextAttemptAt)
+    );
+    await this.ctx.storage.setAlarm(Math.max(Date.now() + 1, nextAttemptAt));
+  }
+
+  private async disconnectRevokedDevice(deviceId: string): Promise<boolean> {
+    try {
+      const deviceRoomId = this.env.Chat.idFromName(`device:${deviceId}`);
+      const deviceRoom = this.env.Chat.get(deviceRoomId);
+      const response = await deviceRoom.fetch(
+        new Request("https://device.internal/internal/revoke", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Worker": this.env.DEVICE_REGISTRATION_SECRET,
+          },
+          body: JSON.stringify({ deviceId }),
+        })
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async alarm(): Promise<void> {
+    const tasks = await this.ctx.storage.list<RevokeRetry>({
+      prefix: "revoke-pending:",
+    });
+    const now = Date.now();
+
+    for (const [key, task] of tasks) {
+      if (task.nextAttemptAt > now) continue;
+
+      const disconnected = await this.disconnectRevokedDevice(task.deviceId);
+      if (disconnected) {
+        await this.ctx.storage.delete(key);
+        continue;
+      }
+
+      const attempts = task.attempts + 1;
+      const delay = Math.min(5 * 60 * 1000, 1000 * (2 ** Math.min(attempts, 8)));
+      await this.ctx.storage.put(key, {
+        ...task,
+        attempts,
+        nextAttemptAt: Date.now() + delay,
+      } satisfies RevokeRetry);
+    }
+
+    await this.scheduleRevokeRetry();
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -630,40 +699,38 @@ export class Chat extends DurableObject<Env> {
       const record = await this.ctx.storage.get<DeviceRecord>(key);
       if (!record) return json({ error: "Device not found" }, 404);
 
+      // Revocation is authoritative in the registry. Persist a retry task
+      // before contacting the room so a temporary room failure is not lost.
       record.revoked = true;
       await this.ctx.storage.put(key, record);
 
-      const deviceRoomId = this.env.Chat.idFromName(`device:${body.deviceId}`);
-      const deviceRoom = this.env.Chat.get(deviceRoomId);
-      const disconnectResponse = await deviceRoom.fetch(
-        new Request("https://device.internal/internal/revoke", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Internal-Worker": secret,
-          },
-          body: JSON.stringify({ deviceId: body.deviceId }),
-        })
-      );
+      const retryKey = `revoke-pending:${body.deviceId}`;
+      await this.ctx.storage.put(retryKey, {
+        deviceId: body.deviceId,
+        attempts: 0,
+        nextAttemptAt: Date.now() + 1000,
+      } satisfies RevokeRetry);
+      await this.scheduleRevokeRetry();
 
-      if (!disconnectResponse.ok) {
+      const disconnected = await this.disconnectRevokedDevice(body.deviceId);
+      if (!disconnected) {
         return json({
           ok: true,
           deviceId: body.deviceId,
           revoked: true,
           disconnectWarning: true,
+          retryScheduled: true,
         }, 202);
       }
 
-      const disconnectResult = await disconnectResponse.json() as {
-        closed?: number;
-      };
+      await this.ctx.storage.delete(retryKey);
+      await this.scheduleRevokeRetry();
 
       return json({
         ok: true,
         deviceId: body.deviceId,
         revoked: true,
-        disconnectedSockets: disconnectResult.closed ?? 0,
+        disconnectWarning: false,
       });
     }
 
