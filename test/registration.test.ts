@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { validateSignalingMessage } from "../src/server/signaling";
 
 import { runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
