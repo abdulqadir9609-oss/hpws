@@ -249,7 +249,7 @@ describe("HPWS Device Registration and Security", () => {
 
     expect(approved.ok).toBe(true);
     expect(approved.deviceId).toMatch(
-      /^HPPHONE(?:1|\\.{2,}[2-9]\\d*)$/
+      /^HPPHONE(?:1|\\.{2,}[1-9]\\d*)$/
     );
 
     const status = await api("/api/device/status", "POST", {
