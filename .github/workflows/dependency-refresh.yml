@@ -25,8 +25,8 @@ jobs:
 
       - name: Upgrade vulnerable direct dependencies
         run: |
-          npm install --save-exact nanoid@5.1.16 react-router@7.18.5
-          npm install --save-dev --save-exact vitest@4.1.12 wrangler@4.159.0
+          npm install --legacy-peer-deps --save-exact nanoid@5.1.16 react-router@7.18.5
+          npm install --legacy-peer-deps --save-dev --save-exact vitest@4.1.12 wrangler@4.159.0
 
       - name: Run tests and type checks
         run: |
