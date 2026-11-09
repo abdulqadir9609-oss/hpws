@@ -91,6 +91,33 @@ describe("WebRTC signaling payload validation", () => {
 });
 
 describe("HPWS Device Registration and Security", () => {
+  it("assigns the finalized stable multi-device ID format", async () => {
+    const adminToken = await loginAdmin();
+    const expected = [
+      "HPPHONE1",
+      "HPPHONE..2",
+      "HPPHONE...3",
+      "HPPHONE....4",
+      "HPPHONE.....5",
+    ];
+
+    for (const deviceId of expected) {
+      const device = newDevice();
+      await registerDevice(device);
+
+      const approval = await api(
+        "/api/devices/approve",
+        "POST",
+        { installId: device.installId },
+        { Authorization: `Bearer ${adminToken}` }
+      );
+
+      expect(approval.status).toBe(200);
+      const data = await approval.json() as { deviceId: string };
+      expect(data.deviceId).toBe(deviceId);
+    }
+  });
+
   it("registers a valid device as pending", async () => {
     const device = newDevice();
     const response = await registerDevice(device);
