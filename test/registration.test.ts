@@ -85,6 +85,62 @@ describe("HPWS Device Registration and Security", () => {
     expect(conflict.status).toBe(409);
   });
 
+  it("returns approved status for a duplicate approved registration", async () => {
+    const device = newDevice();
+    await registerDevice(device);
+    const adminToken = await loginAdmin();
+
+    const approval = await api(
+      "/api/devices/approve",
+      "POST",
+      { installId: device.installId },
+      { Authorization: `Bearer ${adminToken}` }
+    );
+    expect(approval.status).toBe(200);
+
+    const duplicate = await registerDevice(device);
+    const data = await duplicate.json() as {
+      ok: boolean;
+      status: string;
+      message: string;
+    };
+
+    expect(duplicate.status).toBe(200);
+    expect(data).toEqual({
+      ok: true,
+      status: "approved",
+      message: "Device already approved",
+    });
+  });
+
+  it("returns rejected status for a duplicate rejected registration", async () => {
+    const device = newDevice();
+    await registerDevice(device);
+    const adminToken = await loginAdmin();
+
+    const rejection = await api(
+      "/api/devices/reject",
+      "POST",
+      { installId: device.installId },
+      { Authorization: `Bearer ${adminToken}` }
+    );
+    expect(rejection.status).toBe(200);
+
+    const duplicate = await registerDevice(device);
+    const data = await duplicate.json() as {
+      ok: boolean;
+      status: string;
+      message: string;
+    };
+
+    expect(duplicate.status).toBe(200);
+    expect(data).toEqual({
+      ok: true,
+      status: "rejected",
+      message: "Device registration was rejected",
+    });
+  });
+
   it("requires administrator authentication", async () => {
     const response = await api("/api/devices/pending");
 
