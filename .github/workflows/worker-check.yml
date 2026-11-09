@@ -25,6 +25,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Report npm audit details
+        run: |
+          npm audit --json > npm-audit.json || true
+          node -e 'const a=require("./npm-audit.json"); for (const [name,v] of Object.entries(a.vulnerabilities||{})) console.log(JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,via:v.via.map(x=>typeof x==="string"?x:{name:x.name,title:x.title,url:x.url,range:x.range}),fixAvailable:v.fixAvailable})); console.log("TOTAL", JSON.stringify(a.metadata?.vulnerabilities||{}));'
+
       - name: Type-check test files
         run: npx tsc --project test
 
