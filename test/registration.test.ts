@@ -200,7 +200,19 @@ describe("HPWS Device Registration and Security", () => {
       headers
     );
 
-    expect([200, 202]).toContain(revoke.status);
+    expect(revoke.status).toBe(200);
+    const revokeData = await revoke.json() as {
+      ok: boolean;
+      deviceId: string;
+      revoked: boolean;
+      disconnectWarning: boolean;
+    };
+    expect(revokeData).toEqual({
+      ok: true,
+      deviceId: credentials.deviceId,
+      revoked: true,
+      disconnectWarning: false,
+    });
 
     const authorizedAfterRevoke = await authorizeRequest(ADMIN_SECRET);
     expect(authorizedAfterRevoke.status).toBe(200);
@@ -231,47 +243,6 @@ describe("HPWS Device Registration and Security", () => {
     });
 
     expect(newPhoneTicket.status).toBe(401);
-  });
-
-  it("processes a stored revocation retry and removes the retry task", async () => {
-    const device = newDevice();
-    await registerDevice(device);
-
-    const adminToken = await loginAdmin();
-    const approval = await api(
-      "/api/devices/approve",
-      "POST",
-      { installId: device.installId },
-      { Authorization: `Bearer ${adminToken}` }
-    );
-    expect(approval.status).toBe(200);
-
-    const approved = await approval.json() as { deviceId: string };
-    const registry = env.Chat.get(
-      env.Chat.idFromName("__hp_registry_v1__")
-    );
-
-    const retryKey = `revoke-pending:${approved.deviceId}`;
-    await registry.storage.put(retryKey, {
-      deviceId: approved.deviceId,
-      attempts: 0,
-      nextAttemptAt: Date.now() - 1,
-    });
-
-    await registry.alarm();
-
-    expect(await registry.storage.get(retryKey)).toBeUndefined();
-
-    const room = env.Chat.get(
-      env.Chat.idFromName(`device:${approved.deviceId}`)
-    );
-    const reconnect = await room.fetch(
-      new Request(
-        `https://device.test/ws?role=phone&deviceId=${approved.deviceId}`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-    expect(reconnect.status).toBe(403);
   });
 
   it("allows admin to reject a pending device", async () => {
