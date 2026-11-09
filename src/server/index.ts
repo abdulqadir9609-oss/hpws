@@ -29,6 +29,11 @@ type RevokeRetry = {
   nextAttemptAt: number;
 };
 
+type AdminLoginRateLimit = {
+  attempts: number;
+  resetAt: number;
+};
+
 const encoder = new TextEncoder();
 
 function json(data: unknown, status = 200): Response {
@@ -146,14 +151,16 @@ export class Chat extends DurableObject<Env> {
   // Durable Objects have one alarm, so revocation retries and expired-ticket
   // cleanup share a single schedule.
   private async scheduleMaintenanceAlarm(): Promise<void> {
-    const [retries, tickets] = await Promise.all([
+    const [retries, tickets, loginLimits] = await Promise.all([
       this.ctx.storage.list<RevokeRetry>({ prefix: "revoke-pending:" }),
       this.ctx.storage.list<{ expiresAt: number }>({ prefix: "ws-ticket:" }),
+      this.ctx.storage.list<AdminLoginRateLimit>({ prefix: "admin-login:" }),
     ]);
 
     const deadlines = [
       ...Array.from(retries.values(), (task) => task.nextAttemptAt),
       ...Array.from(tickets.values(), (ticket) => ticket.expiresAt),
+      ...Array.from(loginLimits.values(), (limit) => limit.resetAt),
     ];
 
     if (deadlines.length === 0) {
@@ -188,12 +195,19 @@ export class Chat extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     const now = Date.now();
-    const tickets = await this.ctx.storage.list<{ expiresAt: number }>({
-      prefix: "ws-ticket:",
-    });
+    const [tickets, loginLimits] = await Promise.all([
+      this.ctx.storage.list<{ expiresAt: number }>({ prefix: "ws-ticket:" }),
+      this.ctx.storage.list<AdminLoginRateLimit>({ prefix: "admin-login:" }),
+    ]);
 
     for (const [key, ticket] of tickets) {
       if (ticket.expiresAt <= now) {
+        await this.ctx.storage.delete(key);
+      }
+    }
+
+    for (const [key, limit] of loginLimits) {
+      if (limit.resetAt <= now) {
         await this.ctx.storage.delete(key);
       }
     }
@@ -392,10 +406,7 @@ export class Chat extends DurableObject<Env> {
       const now = Date.now();
 
       const loginResult = await this.ctx.storage.transaction(async (txn) => {
-        const current = await txn.get<{
-          attempts: number;
-          resetAt: number;
-        }>(rateKey);
+        const current = await txn.get<AdminLoginRateLimit>(rateKey);
 
         if (current && current.resetAt > now && current.attempts >= 5) {
           return "blocked" as const;
@@ -418,6 +429,12 @@ export class Chat extends DurableObject<Env> {
         await txn.delete(rateKey);
         return "success" as const;
       });
+
+      if (loginResult !== "blocked") {
+        // Failed-attempt records expire automatically after their 15-minute
+        // window; successful authentication removes this IP's record.
+        await this.scheduleMaintenanceAlarm();
+      }
 
       if (loginResult === "blocked") {
         return json({ error: "Too many login attempts. Try again later." }, 429);
