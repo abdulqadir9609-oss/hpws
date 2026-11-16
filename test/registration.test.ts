@@ -326,6 +326,33 @@ describe("HPWS Device Registration and Security", () => {
     const wrongSecret = await authorizeRequest("incorrect-internal-secret");
     expect(wrongSecret.status).toBe(403);
 
+    // Keep an active room connection open while revoking the device.
+    const roomId = env.Chat.idFromName(`device:${credentials.deviceId}`);
+    const room = env.Chat.get(roomId);
+    const activeConnection = await room.fetch(
+      new Request(
+        `https://device.test/ws?role=phone&deviceId=${credentials.deviceId}`,
+        { headers: { Upgrade: "websocket" } }
+      )
+    );
+
+    expect(activeConnection.status).toBe(101);
+    const activeSocket = activeConnection.webSocket;
+    expect(activeSocket).toBeTruthy();
+    activeSocket!.accept();
+
+    let closeTimeout: ReturnType<typeof setTimeout>;
+    const activeSocketClosed = new Promise<CloseEvent>((resolve, reject) => {
+      closeTimeout = setTimeout(() => {
+        reject(new Error("Active WebSocket was not closed after revocation"));
+      }, 2000);
+
+      activeSocket!.addEventListener("close", (event) => {
+        clearTimeout(closeTimeout);
+        resolve(event as CloseEvent);
+      }, { once: true });
+    });
+
     const revoke = await api(
       "/api/devices/revoke",
       "POST",
@@ -347,13 +374,14 @@ describe("HPWS Device Registration and Security", () => {
       disconnectWarning: false,
     });
 
+    const closeEvent = await activeSocketClosed;
+    expect(closeEvent.code).toBe(4001);
+
     const authorizedAfterRevoke = await authorizeRequest(ADMIN_SECRET);
     expect(authorizedAfterRevoke.status).toBe(200);
     expect(await authorizedAfterRevoke.json()).toEqual({ authorized: false });
 
     // A revoked device must not reconnect to its Durable Object room.
-    const roomId = env.Chat.idFromName(`device:${credentials.deviceId}`);
-    const room = env.Chat.get(roomId);
     const revokedConnection = await room.fetch(
       new Request(
         `https://device.test/ws?role=phone&deviceId=${credentials.deviceId}`,
@@ -678,6 +706,128 @@ describe("HPWS Device Registration and Security", () => {
     );
 
     expect(blocked.status).toBe(429);
+  });
+
+
+  it("isolates signaling messages between two devices", async () => {
+    const adminToken = await loginAdmin();
+    const headers = { Authorization: `Bearer ${adminToken}` };
+
+    async function approveNewDevice() {
+      const device = newDevice();
+      expect((await registerDevice(device)).status).toBe(202);
+
+      const approval = await api(
+        "/api/devices/approve", "POST",
+        { installId: device.installId }, headers
+      );
+      expect(approval.status).toBe(200);
+
+      const status = await api("/api/device/status", "POST", {
+        installId: device.installId, proof: device.proof,
+      });
+      expect(status.status).toBe(200);
+
+      const credentials = await status.json() as {
+        deviceId: string; token: string;
+      };
+      return credentials.deviceId;
+    }
+
+    async function connect(deviceId: string, role: "phone" | "controller") {
+      const room = env.Chat.get(env.Chat.idFromName(`device:${deviceId}`));
+      const response = await room.fetch(new Request(
+        `https://device.test/ws?role=${role}&deviceId=${deviceId}`,
+        { headers: { Upgrade: "websocket" } }
+      ));
+
+      expect(response.status).toBe(101);
+      const socket = response.webSocket;
+      expect(socket).toBeTruthy();
+      socket!.accept();
+      return socket!;
+    }
+
+    function nextMessageOfType(
+      socket: WebSocket, type: string, timeoutMs = 2000
+    ) {
+      return new Promise<any>((resolve, reject) => {
+        const onMessage = (event: MessageEvent) => {
+          const data = JSON.parse(String(event.data));
+          if (data.type !== type) return;
+          clearTimeout(timeout);
+          socket.removeEventListener("message", onMessage);
+          resolve(data);
+        };
+        const timeout = setTimeout(() => {
+          socket.removeEventListener("message", onMessage);
+          reject(new Error(`Timed out waiting for ${type} message`));
+        }, timeoutMs);
+        socket.addEventListener("message", onMessage);
+      });
+    }
+
+    function receivesType(
+      socket: WebSocket, type: string, timeoutMs = 250
+    ) {
+      return new Promise<boolean>((resolve) => {
+        const onMessage = (event: MessageEvent) => {
+          const data = JSON.parse(String(event.data));
+          if (data.type !== type) return;
+          clearTimeout(timeout);
+          socket.removeEventListener("message", onMessage);
+          resolve(true);
+        };
+        const timeout = setTimeout(() => {
+          socket.removeEventListener("message", onMessage);
+          resolve(false);
+        }, timeoutMs);
+        socket.addEventListener("message", onMessage);
+      });
+    }
+
+    const deviceA = await approveNewDevice();
+    const deviceB = await approveNewDevice();
+    expect(deviceA).not.toBe(deviceB);
+
+    const sockets: WebSocket[] = [];
+
+    try {
+      const phoneA = await connect(deviceA, "phone");
+      sockets.push(phoneA);
+      const controllerA = await connect(deviceA, "controller");
+      sockets.push(controllerA);
+      const phoneB = await connect(deviceB, "phone");
+      sockets.push(phoneB);
+      const controllerB = await connect(deviceB, "controller");
+      sockets.push(controllerB);
+
+      const messageA = nextMessageOfType(controllerA, "offer");
+      const leakToB = receivesType(controllerB, "offer");
+      phoneA.send(JSON.stringify({
+        type: "offer", sdp: "device-a-test-offer",
+      }));
+
+      expect(await messageA).toEqual({
+        type: "offer", sdp: "device-a-test-offer",
+      });
+      expect(await leakToB).toBe(false);
+
+      const messageB = nextMessageOfType(controllerB, "candidate");
+      const leakToA = receivesType(controllerA, "candidate");
+      phoneB.send(JSON.stringify({
+        type: "candidate", candidate: "device-b-test-candidate",
+      }));
+
+      expect(await messageB).toEqual({
+        type: "candidate", candidate: "device-b-test-candidate",
+      });
+      expect(await leakToA).toBe(false);
+    } finally {
+      for (const socket of sockets) {
+        try { socket.close(); } catch {}
+      }
+    }
   });
 
 });
