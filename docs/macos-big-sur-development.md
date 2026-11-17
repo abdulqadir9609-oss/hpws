@@ -9,7 +9,7 @@ the Worker runtime is a separate compatibility requirement.
 
 ## What can run on Big Sur
 
-After installing the project dependencies, run the TypeScript-only checks:
+On Big Sur, install the JavaScript packages without running native post-install scripts, then run the TypeScript-only checks. The native esbuild binary cannot execute on this OS, so its install-time validation must be skipped for this limited TypeScript-only workflow:
 
 ```bash
 npm ci --legacy-peer-deps
@@ -17,7 +17,9 @@ npm run check:types
 ```
 
 The `check:types` script checks the client and server TypeScript projects
-without starting Wrangler or `workerd`.
+without starting Wrangler or `workerd`. `--ignore-scripts` means native build-tool
+install scripts are skipped; do not expect esbuild, Wrangler local execution,
+or Cloudflare Vitest runtime tests to work on Big Sur.
 
 These commands require a Node.js version supported by the pinned project
 toolchain. If dependency installation itself fails on Big Sur, do not run
