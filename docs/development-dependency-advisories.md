@@ -8,11 +8,10 @@ dependency tree:
 `@cloudflare/vitest-plugin` / `vitest` -> `vite` / `tinyglobby` ->
 `fdir` -> `picomatch`.
 
-GitHub advisory GHSA-fc5q-39xc-vjpf (CVE-2026-112366) identifies versions
-through 4.0.7 as affected by a regular-expression denial-of-service issue
-in single-branch repeated extglob patterns. As of this date, the advisory
-does not identify a patched version and npm lists 4.0.7 as the latest
-published picomatch release. Do not assume that a forced downgrade or an
+GitHub advisory GHSA-fc5q-39xc-vjpf identifies the lockfile's resolved
+`picomatch@4.0.7` as affected by a regular-expression denial-of-service issue
+in single-branch repeated extglob patterns. Check the advisory and npm registry
+again before remediation; do not assume that a forced downgrade or an
 unreviewed fork is a security fix.
 
 ## Current project exposure
