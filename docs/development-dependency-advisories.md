@@ -14,6 +14,14 @@ in single-branch repeated extglob patterns. Check the advisory and npm registry
 again before remediation; do not assume that a forced downgrade or an
 unreviewed fork is a security fix.
 
+As of 2026-11-17, the upstream repository has an open, unmerged candidate
+fix in [pull request #254](https://github.com/micromatch/picomatch/pull/254).
+It reports passing upstream tests, but it is not an official release and is
+not yet a safe dependency target for this project. Do not pin this project to
+the PR branch or commit. Revisit only after the maintainer reviews/merges the
+change and publishes a release, then verify the release against the advisory
+and this project's full test suite.
+
 ## Current project exposure
 
 The affected package is present in `devDependencies` transitively, not in
