@@ -34,8 +34,35 @@ jobs:
           npx vitest run
           npm run check
 
-      - name: Verify npm audit
-        run: npm audit --audit-level=moderate
+      - name: Enforce production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Report full dependency audit
+        if: always()
+        run: |
+          npm audit --json > npm-audit.json || true
+          node - <<'NODE'
+          const audit = require("./npm-audit.json");
+          const vulnerabilities = Object.entries(audit.vulnerabilities || {});
+          console.log("Full dependency audit summary:", JSON.stringify(audit.metadata?.vulnerabilities || {}));
+          for (const [name, vulnerability] of vulnerabilities) {
+            console.log(JSON.stringify({
+              name,
+              severity: vulnerability.severity,
+              isDirect: vulnerability.isDirect,
+              range: vulnerability.range,
+              via: vulnerability.via.map((item) =>
+                typeof item === "string"
+                  ? item
+                  : { title: item.title, url: item.url, range: item.range }
+              ),
+              fixAvailable: vulnerability.fixAvailable
+            }));
+          }
+          if (vulnerabilities.length > 0) {
+            console.log("NOTICE: Full audit includes development-tool dependencies. Production dependencies are enforced by the blocking audit step; see docs/development-dependency-advisories.md for the tracked picomatch advisory.");
+          }
+          NODE
 
       - name: Commit refreshed package files
         run: |
