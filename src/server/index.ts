@@ -945,6 +945,42 @@ export class Chat extends DurableObject<Env> {
       return;
     }
 
+    // The registry is the authoritative source for revocation. A room-local
+    // disconnect can be delayed or fail, so re-check authorization before
+    // forwarding every signaling message. Fail closed if the registry cannot
+    // be reached; never keep relaying on stale room state.
+    try {
+      const registryId = this.env.Chat.idFromName("__hp_registry_v1__");
+      const registry = this.env.Chat.get(registryId);
+      const authorization = await registry.fetch(
+        new Request("https://registry.internal/internal/device-authorize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Worker": this.env.DEVICE_REGISTRATION_SECRET,
+          },
+          body: JSON.stringify({ deviceId: sender.deviceId }),
+        })
+      );
+
+      if (!authorization.ok) {
+        ws.close(1011, "Authorization unavailable");
+        return;
+      }
+
+      const authorizationResult = await authorization.json() as {
+        authorized?: boolean;
+      };
+
+      if (!authorizationResult.authorized) {
+        ws.close(4001, "Device revoked");
+        return;
+      }
+    } catch {
+      ws.close(1011, "Authorization unavailable");
+      return;
+    }
+
     const text = typeof message === "string"
       ? message
       : new TextDecoder().decode(message);
