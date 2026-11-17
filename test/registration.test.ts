@@ -896,15 +896,7 @@ describe("HPWS Device Registration and Security", () => {
         await state.storage.put(key, { ...record, revoked: true });
       });
 
-      phone.send(JSON.stringify({
-        type: "offer",
-        sdp: "must-not-be-forwarded-after-revocation",
-      }));
-
-      const closeEvent = await closed;
-      expect(closeEvent.code).toBe(4001);
-
-      const leaked = await new Promise<boolean>((resolve) => {
+      const leaked = new Promise<boolean>((resolve) => {
         const onMessage = (event: MessageEvent) => {
           const data = JSON.parse(String(event.data));
           if (data.type === "offer") {
@@ -919,7 +911,15 @@ describe("HPWS Device Registration and Security", () => {
         }, 250);
         controller.addEventListener("message", onMessage);
       });
-      expect(leaked).toBe(false);
+
+      phone.send(JSON.stringify({
+        type: "offer",
+        sdp: "must-not-be-forwarded-after-revocation",
+      }));
+
+      const closeEvent = await closed;
+      expect(closeEvent.code).toBe(4001);
+      expect(await leaked).toBe(false);
     } finally {
       try { phone.close(); } catch {}
       try { controller.close(); } catch {}
