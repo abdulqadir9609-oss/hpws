@@ -197,3 +197,6 @@ dist
 !.env.example
 .dev.vars*
 !.dev.vars.example
+
+# Local source-code backups (never commit)
+src/server/*.before_*
