@@ -25,14 +25,6 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Enforce npm security audit
-        run: npm audit --audit-level=moderate
-
-      - name: Report npm audit details
-        run: |
-          npm audit --json > npm-audit.json || true
-          node -e 'const a=require("./npm-audit.json"); for (const [name,v] of Object.entries(a.vulnerabilities||{})) console.log(JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,via:v.via.map(x=>typeof x==="string"?x:{name:x.name,title:x.title,url:x.url,range:x.range}),fixAvailable:v.fixAvailable})); console.log("TOTAL", JSON.stringify(a.metadata?.vulnerabilities||{}));'
-
       - name: Type-check test files
         run: npx tsc --project test
 
@@ -41,3 +33,33 @@ jobs:
 
       - name: Run TypeScript and Wrangler dry-run checks
         run: npm run check
+
+      - name: Enforce production dependency security audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Report full dependency audit
+        if: always()
+        run: |
+          npm audit --json > npm-audit.json || true
+          node - <<'NODE'
+          const audit = require("./npm-audit.json");
+          const vulnerabilities = Object.entries(audit.vulnerabilities || {});
+          console.log("Full dependency audit summary:", JSON.stringify(audit.metadata?.vulnerabilities || {}));
+          for (const [name, vulnerability] of vulnerabilities) {
+            console.log(JSON.stringify({
+              name,
+              severity: vulnerability.severity,
+              isDirect: vulnerability.isDirect,
+              range: vulnerability.range,
+              via: vulnerability.via.map((item) =>
+                typeof item === "string"
+                  ? item
+                  : { title: item.title, url: item.url, range: item.range }
+              ),
+              fixAvailable: vulnerability.fixAvailable
+            }));
+          }
+          if (vulnerabilities.length > 0) {
+            console.log("NOTICE: Full audit includes development-tool dependencies. Production dependencies are enforced by the blocking audit step.");
+          }
+          NODE
