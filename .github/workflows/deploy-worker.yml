@@ -32,6 +32,11 @@ jobs:
       - name: Run project checks
         run: npm run check
 
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --name hpws
+
       - name: Publish Worker runtime secret
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -40,8 +45,3 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$DEVICE_REGISTRATION_SECRET"
           printf '%s' "$DEVICE_REGISTRATION_SECRET" | npx wrangler secret put DEVICE_REGISTRATION_SECRET --name hpws
-
-      - name: Deploy Worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy --name hpws
