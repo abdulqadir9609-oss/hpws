@@ -13,6 +13,7 @@ type Device = {
   createdAt: number;
   lastSeen: number | null;
   revoked: boolean;
+  online?: boolean;
 };
 
 type ApiError = { error?: string };
@@ -199,7 +200,8 @@ function App() {
 
       <section className="hp-stats">
         <article className="hp-stat"><span>Pending approvals</span><strong>{pending.length}</strong></article>
-        <article className="hp-stat"><span>Registered devices</span><strong>{devices.filter((d) => !d.revoked).length}</strong></article>
+        <article className="hp-stat"><span>Authorized devices</span><strong>{devices.filter((d) => !d.revoked).length}</strong></article>
+        <article className="hp-stat"><span>Online now</span><strong>{devices.filter((d) => !d.revoked && d.online).length}</strong></article>
         <article className="hp-stat"><span>Revoked devices</span><strong>{devices.filter((d) => d.revoked).length}</strong></article>
       </section>
 
@@ -243,12 +245,13 @@ function App() {
                 <div className="hp-device-main">
                   <div className="hp-device-title">
                     <strong>{device.label || "Android device"}</strong>
-                    <span className={device.revoked ? "hp-status hp-status-off" : "hp-status hp-status-on"}>
-                      {device.revoked ? "Revoked" : "Authorized"}
+                    <span className={device.revoked ? "hp-status hp-status-off" : device.online ? "hp-status hp-status-on" : "hp-status hp-status-off"}>
+                      {device.revoked ? "Revoked" : device.online ? "Online" : "Offline"}
                     </span>
                   </div>
                   <span className="hp-device-id">{device.deviceId}</span>
                   <span>Last connected: {dateLabel(device.lastSeen)}</span>
+                  <span>Access: {device.revoked ? "Revoked" : "Authorized"}</span>
                 </div>
                 {!device.revoked && (
                   <div className="hp-actions">
