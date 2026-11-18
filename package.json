@@ -33,7 +33,8 @@
 	"private": true,
 	"scripts": {
 		"cf-typegen": "wrangler types ./src/server/worker-configuration.d.ts",
-		"check": "npm run check:types && wrangler deploy --dry-run",
+		"build": "esbuild src/client/index.tsx --bundle --minify --target=es2022 --outfile=public/dist/index.js",
+		"check": "npm run build && npm run check:types && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"check:types": "tsc --project src/client && tsc --project src/server"

@@ -3,6 +3,7 @@ import { DurableObject } from "cloudflare:workers";
 
 interface Env extends Cloudflare.Env {
   DEVICE_REGISTRATION_SECRET: string;
+  ASSETS: Fetcher;
 }
 
 type PendingDevice = {
@@ -1182,6 +1183,6 @@ export default {
       return room.fetch(new Request(targetUrl.toString(), request));
     }
 
-    return new Response("HP WEB Signaling Server");
+    return env.ASSETS.fetch(request);
   },
 };
