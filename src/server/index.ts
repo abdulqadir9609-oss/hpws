@@ -256,6 +256,25 @@ export class Chat extends DurableObject<Env> {
     const url = new URL(request.url);
 
     if (
+      url.pathname === "/internal/device-presence" &&
+      request.method === "GET"
+    ) {
+      const internalSecret = request.headers.get("X-Internal-Worker") || "";
+      if (!safeEqual(internalSecret, this.env.DEVICE_REGISTRATION_SECRET)) {
+        return json({ error: "Forbidden" }, 403);
+      }
+
+      const online = this.ctx.getWebSockets().some((socket) => {
+        const attachment = socket.deserializeAttachment() as
+          | { role?: string }
+          | null;
+        return attachment?.role === "phone" && socket.readyState === WebSocket.OPEN;
+      });
+
+      return json({ online });
+    }
+
+    if (
       url.pathname === "/internal/device-authorize" &&
       request.method === "POST"
     ) {
@@ -728,13 +747,39 @@ export class Chat extends DurableObject<Env> {
         prefix: "device:",
       });
 
-      const devices = Array.from(records.values()).map((item) => ({
-        deviceId: item.deviceId,
-        label: item.label,
-        createdAt: item.createdAt,
-        lastSeen: item.lastSeen,
-        revoked: item.revoked,
-      }));
+      const devices = await Promise.all(
+        Array.from(records.values()).map(async (item) => {
+          let online = false;
+          if (!item.revoked) {
+            try {
+              const roomId = this.env.Chat.idFromName(`device:${item.deviceId}`);
+              const room = this.env.Chat.get(roomId);
+              const presence = await room.fetch(
+                new Request("https://device.internal/internal/device-presence", {
+                  headers: {
+                    "X-Internal-Worker": this.env.DEVICE_REGISTRATION_SECRET,
+                  },
+                })
+              );
+              if (presence.ok) {
+                const result = await presence.json() as { online?: boolean };
+                online = result.online === true;
+              }
+            } catch {
+              online = false;
+            }
+          }
+
+          return {
+            deviceId: item.deviceId,
+            label: item.label,
+            createdAt: item.createdAt,
+            lastSeen: item.lastSeen,
+            revoked: item.revoked,
+            online,
+          };
+        })
+      );
 
       devices.sort((a, b) => a.createdAt - b.createdAt);
       return json({ devices });
@@ -942,6 +987,42 @@ export class Chat extends DurableObject<Env> {
       !sender.deviceId
     ) {
       ws.close(1008, "Invalid session");
+      return;
+    }
+
+    // The registry is the authoritative source for revocation. A room-local
+    // disconnect can be delayed or fail, so re-check authorization before
+    // forwarding every signaling message. Fail closed if the registry cannot
+    // be reached; never keep relaying on stale room state.
+    try {
+      const registryId = this.env.Chat.idFromName("__hp_registry_v1__");
+      const registry = this.env.Chat.get(registryId);
+      const authorization = await registry.fetch(
+        new Request("https://registry.internal/internal/device-authorize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Worker": this.env.DEVICE_REGISTRATION_SECRET,
+          },
+          body: JSON.stringify({ deviceId: sender.deviceId }),
+        })
+      );
+
+      if (!authorization.ok) {
+        ws.close(1011, "Authorization unavailable");
+        return;
+      }
+
+      const authorizationResult = await authorization.json() as {
+        authorized?: boolean;
+      };
+
+      if (!authorizationResult.authorized) {
+        ws.close(4001, "Device revoked");
+        return;
+      }
+    } catch {
+      ws.close(1011, "Authorization unavailable");
       return;
     }
 

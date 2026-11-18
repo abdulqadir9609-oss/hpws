@@ -830,4 +830,100 @@ describe("HPWS Device Registration and Security", () => {
     }
   });
 
+  it("stops an already-connected device from signaling after registry revocation", async () => {
+    const adminToken = await loginAdmin();
+    const headers = { Authorization: `Bearer ${adminToken}` };
+    const device = newDevice();
+    expect((await registerDevice(device)).status).toBe(202);
+
+    const approval = await api(
+      "/api/devices/approve",
+      "POST",
+      { installId: device.installId },
+      headers
+    );
+    expect(approval.status).toBe(200);
+
+    const status = await api("/api/device/status", "POST", {
+      installId: device.installId,
+      proof: device.proof,
+    });
+    expect(status.status).toBe(200);
+    const credentials = await status.json() as {
+      deviceId: string;
+      token: string;
+    };
+
+    const room = env.Chat.get(
+      env.Chat.idFromName(`device:${credentials.deviceId}`)
+    );
+
+    async function connect(role: "phone" | "controller") {
+      const response = await room.fetch(new Request(
+        `https://device.test/ws?role=${role}&deviceId=${credentials.deviceId}`,
+        { headers: { Upgrade: "websocket" } }
+      ));
+      expect(response.status).toBe(101);
+      const socket = response.webSocket!;
+      socket.accept();
+      return socket;
+    }
+
+    const phone = await connect("phone");
+    const controller = await connect("controller");
+
+    try {
+      const closed = new Promise<CloseEvent>((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error("Revoked socket remained open")),
+          2000
+        );
+        phone.addEventListener("close", (event) => {
+          clearTimeout(timeout);
+          resolve(event as CloseEvent);
+        }, { once: true });
+      });
+
+      // Simulate the registry marking a device revoked while the room-level
+      // disconnect request is unavailable or has not yet completed.
+      const registry = env.Chat.get(
+        env.Chat.idFromName("__hp_registry_v1__")
+      );
+      await runInDurableObject(registry, async (_instance, state) => {
+        const key = `device:${credentials.deviceId}`;
+        const record = await state.storage.get<Record<string, unknown>>(key);
+        expect(record).toBeTruthy();
+        await state.storage.put(key, { ...record, revoked: true });
+      });
+
+      const leaked = new Promise<boolean>((resolve) => {
+        const onMessage = (event: MessageEvent) => {
+          const data = JSON.parse(String(event.data));
+          if (data.type === "offer") {
+            clearTimeout(timeout);
+            controller.removeEventListener("message", onMessage);
+            resolve(true);
+          }
+        };
+        const timeout = setTimeout(() => {
+          controller.removeEventListener("message", onMessage);
+          resolve(false);
+        }, 250);
+        controller.addEventListener("message", onMessage);
+      });
+
+      phone.send(JSON.stringify({
+        type: "offer",
+        sdp: "must-not-be-forwarded-after-revocation",
+      }));
+
+      const closeEvent = await closed;
+      expect(closeEvent.code).toBe(4001);
+      expect(await leaked).toBe(false);
+    } finally {
+      try { phone.close(); } catch {}
+      try { controller.close(); } catch {}
+    }
+  });
+
 });

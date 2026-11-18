@@ -33,8 +33,9 @@
 	"private": true,
 	"scripts": {
 		"cf-typegen": "wrangler types ./src/server/worker-configuration.d.ts",
-		"check": "tsc --project src/client && tsc --project src/server && wrangler deploy --dry-run",
+		"check": "npm run check:types && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
-		"dev": "wrangler dev"
+		"dev": "wrangler dev",
+		"check:types": "tsc --project src/client && tsc --project src/server"
 	}
 }

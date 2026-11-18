@@ -1,0 +1,77 @@
+name: Dependency Security Refresh
+
+on:
+  push:
+    branches:
+      - ci/worker-security-checks
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Upgrade vulnerable direct dependencies
+        run: |
+          npm install --legacy-peer-deps --save-exact nanoid@5.1.16 react-router@7.18.5
+          npm install --legacy-peer-deps --save-dev --save-exact vitest@4.1.12 wrangler@4.159.0
+
+      - name: Run tests and type checks
+        run: |
+          npx tsc --project test
+          npx vitest run
+          npm run check
+
+      - name: Enforce production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Report full dependency audit
+        if: always()
+        run: |
+          npm audit --json > npm-audit.json || true
+          node - <<'NODE'
+          const audit = require("./npm-audit.json");
+          const vulnerabilities = Object.entries(audit.vulnerabilities || {});
+          console.log("Full dependency audit summary:", JSON.stringify(audit.metadata?.vulnerabilities || {}));
+          for (const [name, vulnerability] of vulnerabilities) {
+            console.log(JSON.stringify({
+              name,
+              severity: vulnerability.severity,
+              isDirect: vulnerability.isDirect,
+              range: vulnerability.range,
+              via: vulnerability.via.map((item) =>
+                typeof item === "string"
+                  ? item
+                  : { title: item.title, url: item.url, range: item.range }
+              ),
+              fixAvailable: vulnerability.fixAvailable
+            }));
+          }
+          if (vulnerabilities.length > 0) {
+            console.log("NOTICE: Full audit includes development-tool dependencies. Production dependencies are enforced by the blocking audit step; see docs/development-dependency-advisories.md for the tracked picomatch advisory.");
+          }
+          NODE
+
+      - name: Commit refreshed package files
+        run: |
+          if ! git diff --quiet -- package.json package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            git commit -m "security: update vulnerable npm dependencies [skip ci]"
+            git push origin HEAD:ci/worker-security-checks
+          else
+            echo "Dependency manifests are already current."
+          fi
