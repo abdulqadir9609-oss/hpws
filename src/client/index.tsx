@@ -82,7 +82,10 @@ function App() {
   }, [token]);
 
   useEffect(() => {
-    if (token) void refresh();
+    if (!token) return;
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 20000);
+    return () => window.clearInterval(timer);
   }, [token, refresh]);
 
   async function login(event: React.FormEvent<HTMLFormElement>) {
