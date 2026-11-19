@@ -14,6 +14,7 @@ type Device = {
   lastSeen: number | null;
   revoked: boolean;
   online?: boolean;
+  appOpen?: boolean;
 };
 
 type ApiError = { error?: string };
@@ -253,6 +254,7 @@ function App() {
                     </span>
                   </div>
                   <span className="hp-device-id">{device.deviceId}</span>
+                  <span className={device.appOpen ? "hp-status hp-status-on" : "hp-status hp-status-off"}>Calculator App: {device.appOpen ? "OPEN" : "OFF"}</span>
                   <span>Last connected: {dateLabel(device.lastSeen)}</span>
                   <span>Access: {device.revoked ? "Revoked" : "Authorized"}</span>
                 </div>
