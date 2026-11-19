@@ -1,0 +1,29 @@
+name: HPWS Build and Type Checks
+
+on:
+  push:
+    branches:
+      - feature/app-foreground-presence-recording-controls
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build frontend, type-check, and validate Worker bundle
+        run: npm run check
