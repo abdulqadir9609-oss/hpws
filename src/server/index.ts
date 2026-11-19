@@ -22,6 +22,7 @@ type DeviceRecord = {
   label: string;
   createdAt: number;
   lastSeen: number | null;
+  appVisibleAt?: number | null;
   revoked: boolean;
 };
 
@@ -778,6 +779,7 @@ export class Chat extends DurableObject<Env> {
             lastSeen: item.lastSeen,
             revoked: item.revoked,
             online,
+            appOpen: !item.revoked && item.appVisibleAt != null && Date.now() - item.appVisibleAt <= 45_000,
           };
         })
       );
@@ -940,6 +942,36 @@ export class Chat extends DurableObject<Env> {
 
       if (!result) return json({ error: "Invalid or expired ticket" }, 401);
       return json(result);
+    }
+
+    if (path === "/api/device/app-presence" && request.method === "POST") {
+      const body = await bodyJson(request);
+      if (
+        !body ||
+        typeof body.deviceId !== "string" ||
+        !isValidDeviceId(body.deviceId) ||
+        typeof body.token !== "string" ||
+        body.token.length < 32 ||
+        body.token.length > 256 ||
+        typeof body.visible !== "boolean"
+      ) {
+        return json({ error: "Invalid app presence request" }, 400);
+      }
+
+      const key = `device:${body.deviceId}`;
+      const record = await this.ctx.storage.get<DeviceRecord>(key);
+      if (
+        !record ||
+        record.revoked ||
+        !safeEqual(record.tokenHash, await hash(body.token))
+      ) {
+        return json({ error: "Invalid device credentials" }, 401);
+      }
+
+      record.appVisibleAt = body.visible ? Date.now() : null;
+      record.lastSeen = Date.now();
+      await this.ctx.storage.put(key, record);
+      return json({ ok: true, appOpen: body.visible });
     }
 
     if (path === "/api/device/verify" && request.method === "POST") {
