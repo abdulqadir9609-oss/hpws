@@ -82,11 +82,6 @@ function App() {
   const screenFrameBuffers = useRef(new Map<string, { kind: string; total: number; chunks: string[] }>());
   const [liveFrame, setLiveFrame] = useState("");
   const [screenShot, setScreenShot] = useState("");
-  const screenPeer = useRef<RTCPeerConnection | null>(null);
-  const screenChannel = useRef<RTCDataChannel | null>(null);
-  const screenRequestId = useRef<string>("");
-  const [liveFrame, setLiveFrame] = useState("");
-  const [screenShot, setScreenShot] = useState("");
 
   const refresh = useCallback(async () => {
     if (!token) return;
