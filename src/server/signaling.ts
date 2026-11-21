@@ -58,5 +58,21 @@ export function validateSignalingMessage(value: unknown): Record<string, unknown
     return normalized;
   }
 
+  if (data.type === "screen-share-request" || data.type === "screen-share-stop") {
+    if (typeof data.requestId !== "string" || !/^[A-Za-z0-9_-]{12,80}$/.test(data.requestId)) return null;
+    return { type: data.type, requestId: data.requestId };
+  }
+
+  if (data.type === "screen-share-status") {
+    const allowed = ["consent-required", "started", "stopped", "denied", "unsupported", "error"];
+    if (
+      typeof data.requestId !== "string" ||
+      !/^[A-Za-z0-9_-]{12,80}$/.test(data.requestId) ||
+      typeof data.status !== "string" ||
+      !allowed.includes(data.status)
+    ) return null;
+    return { type: "screen-share-status", requestId: data.requestId, status: data.status };
+  }
+
   return null;
 }

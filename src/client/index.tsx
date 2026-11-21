@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 type PendingDevice = {
@@ -17,6 +17,16 @@ type Device = {
 };
 
 type ApiError = { error?: string };
+
+type MediaItem = {
+  key: string;
+  size: number;
+  uploadedAt: string;
+  etag: string;
+  category: string;
+  fileName: string;
+  contentType: string;
+};
 
 const API_BASE = "";
 
@@ -57,6 +67,15 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [mediaDeviceId, setMediaDeviceId] = useState("");
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [mediaError, setMediaError] = useState("");
+  const [playingMedia, setPlayingMedia] = useState<{ key: string; url: string; contentType: string; fileName: string } | null>(null);
+  const [screenDeviceId, setScreenDeviceId] = useState("");
+  const [screenStatus, setScreenStatus] = useState("idle");
+  const [screenMessage, setScreenMessage] = useState("");
+  const screenSocket = useRef<WebSocket | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -87,6 +106,118 @@ function App() {
     const timer = window.setInterval(() => void refresh(), 20000);
     return () => window.clearInterval(timer);
   }, [token, refresh]);
+
+  async function loadMedia(deviceId: string) {
+    if (!deviceId) return;
+    setMediaBusy(true);
+    setMediaError("");
+    setPlayingMedia(null);
+    try {
+      const result = await api<{ media: MediaItem[] }>(
+        `media?deviceId=${encodeURIComponent(deviceId)}`, token,
+      );
+      setMediaItems(result.media || []);
+      setMediaDeviceId(deviceId);
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : "Unable to load recordings");
+      setMediaItems([]);
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function playMedia(item: MediaItem) {
+    setMediaBusy(true);
+    setMediaError("");
+    try {
+      const result = await api<{ url: string }>("media/access", token, {
+        deviceId: mediaDeviceId,
+        key: item.key,
+      });
+      setPlayingMedia({
+        key: item.key,
+        url: new URL(result.url, window.location.origin).toString(),
+        contentType: item.contentType,
+        fileName: item.fileName,
+      });
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : "Unable to open recording");
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  function closeScreenSocket(sendStop = false) {
+    const socket = screenSocket.current;
+    if (socket && socket.readyState === WebSocket.OPEN && sendStop) {
+      socket.send(JSON.stringify({ type: "screen-share-stop" }));
+    }
+    if (socket) {
+      socket.close();
+      screenSocket.current = null;
+    }
+  }
+
+  async function requestScreenShare() {
+    if (!screenDeviceId) {
+      setScreenMessage("Select an authorized phone first.");
+      return;
+    }
+    closeScreenSocket();
+    setScreenStatus("connecting");
+    setScreenMessage("Connecting securely to the selected phone…");
+    try {
+      const result = await api<{ ticket: string }>("ws-ticket/controller", token, { deviceId: screenDeviceId });
+      const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(`${scheme}//${window.location.host}/ws?ticket=${encodeURIComponent(result.ticket)}`);
+      screenSocket.current = socket;
+      socket.onopen = () => {
+        setScreenStatus("requesting");
+        setScreenMessage("Connected. Sending the screen-sharing request…");
+        socket.send(JSON.stringify({
+          type: "screen-share-request",
+          requestId: crypto.randomUUID(),
+        }));
+      };
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data)) as { type?: string; status?: string; message?: string };
+          if (message.type === "screen-share-status") {
+            const status = message.status || "unknown";
+            setScreenStatus(status);
+            const descriptions: Record<string, string> = {
+              "consent-required": "Open the phone app and approve Android’s screen-capture prompt.",
+              started: "The phone reports that screen sharing has started. Waiting for the live video stream.",
+              stopped: "Screen sharing has stopped.",
+              denied: "Screen sharing was declined on the phone.",
+              unsupported: "This phone app version does not support screen sharing yet.",
+              error: message.message || "The phone reported a screen-sharing error.",
+            };
+            setScreenMessage(descriptions[status] || message.message || `Phone status: ${status}`);
+          }
+        } catch {
+          setScreenMessage("Received an unreadable response from the phone.");
+        }
+      };
+      socket.onerror = () => {
+        setScreenStatus("error");
+        setScreenMessage("Secure connection failed. Check that the phone is online.");
+      };
+      socket.onclose = () => {
+        if (screenSocket.current === socket) screenSocket.current = null;
+        setScreenStatus((current) => current === "stopped" ? current : "disconnected");
+      };
+    } catch (err) {
+      setScreenStatus("error");
+      setScreenMessage(err instanceof Error ? err.message : "Unable to request screen sharing.");
+    }
+  }
+
+  function formatBytes(value: number): string {
+    if (!Number.isFinite(value) || value < 0) return "Unknown size";
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(0)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   async function login(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -267,10 +398,75 @@ function App() {
         )}
       </section>
 
-      <section className="hp-panel hp-limitation">
+      <section className="hp-panel">
+        <div className="hp-section-heading">
+          <div><p className="hp-eyebrow">PRIVATE CLOUD STORAGE</p><h2>Recordings</h2></div>
+          <button className="hp-button hp-secondary" disabled={mediaBusy || !mediaDeviceId} onClick={() => void loadMedia(mediaDeviceId)}>Refresh recordings</button>
+        </div>
+        <p className="hp-muted">Recordings are stored privately in Cloudflare R2 and can only be opened from an authenticated administrator session.</p>
+        <label htmlFor="media-device">Select phone</label>
+        <select id="media-device" value={mediaDeviceId} onChange={(event) => void loadMedia(event.target.value)}>
+          <option value="">Choose an authorized device</option>
+          {devices.filter((device) => !device.revoked).map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>{device.label || "Android device"} · {device.deviceId}</option>
+          ))}
+        </select>
+        {mediaBusy && <p className="hp-muted" role="status">Loading recordings…</p>}
+        {mediaError && <p className="hp-alert hp-error" role="alert">{mediaError}</p>}
+        {mediaDeviceId && !mediaBusy && mediaItems.length === 0 && !mediaError && (
+          <div className="hp-empty">No uploaded recordings were found for this device.</div>
+        )}
+        {mediaItems.length > 0 && (
+          <div className="hp-list">
+            {mediaItems.map((item) => (
+              <article className="hp-device" key={item.key}>
+                <div className="hp-device-main">
+                  <strong>{item.fileName}</strong>
+                  <span>{item.category.replaceAll("_", " ")} · {formatBytes(item.size)}</span>
+                  <span>Uploaded: {dateLabel(Date.parse(item.uploadedAt))}</span>
+                </div>
+                <div className="hp-actions">
+                  <button className="hp-button hp-primary" disabled={mediaBusy} onClick={() => void playMedia(item)}>
+                    {playingMedia?.key === item.key ? "Reload player" : "Play"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+        {playingMedia && (
+          <div className="hp-media-player">
+            <h3>{playingMedia.fileName}</h3>
+            {playingMedia.contentType.startsWith("video/") ? (
+              <video controls playsInline preload="metadata" src={playingMedia.url} style={{ width: "100%", maxHeight: "65vh", background: "#000" }} />
+            ) : (
+              <audio controls preload="metadata" src={playingMedia.url} style={{ width: "100%" }} />
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="hp-panel">
         <p className="hp-eyebrow">REMOTE CONTROL</p>
         <h2>Live screen and screenshot</h2>
-        <p>Device approval and access management are connected. Live screen viewing and screenshot requests are not enabled yet: the Android app must implement the matching WebRTC and MediaProjection flow before these controls can work safely.</p>
+        <p className="hp-muted">Choose an authorized phone and request a screen-sharing session. The phone user must approve Android’s screen-capture prompt before any screen content can be shared.</p>
+        <label htmlFor="screen-device">Select phone</label>
+        <select id="screen-device" value={screenDeviceId} onChange={(event) => setScreenDeviceId(event.target.value)}>
+          <option value="">Choose an authorized device</option>
+          {devices.filter((device) => !device.revoked).map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>{device.label || "Android device"} · {device.deviceId}</option>
+          ))}
+        </select>
+        <div className="hp-actions">
+          <button className="hp-button hp-primary" onClick={() => void requestScreenShare()} disabled={!screenDeviceId || screenStatus === "connecting" || screenStatus === "requesting"}>
+            {screenStatus === "connecting" ? "Connecting…" : "Request screen sharing"}
+          </button>
+          <button className="hp-button hp-secondary" onClick={() => { closeScreenSocket(true); setScreenStatus("stopped"); setScreenMessage("Stop request sent. The phone will stop sharing when it receives it."); }} disabled={!screenSocket.current}>
+            Stop sharing
+          </button>
+        </div>
+        <p className="hp-muted" role="status">{screenMessage || "No screen-sharing session is active."}</p>
+        <p className="hp-footnote">Live video and in-controller screenshots become available after the Android screen-capture and WebRTC receiver are implemented. No screenshot is saved to the phone’s Gallery or Vault.</p>
       </section>
       <footer className="hp-footer">HP Web Controller · Secure administrator session</footer>
     </main>
