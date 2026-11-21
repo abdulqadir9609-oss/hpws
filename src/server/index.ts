@@ -1191,7 +1191,7 @@ async function handleMediaUpload(request: Request, env: Env, url: URL): Promise<
       if (
         (category !== "audio_recordings" && category !== "video_recordings") ||
         !/^(audio|video)\/[a-zA-Z0-9.+-]+$/.test(contentType) ||
-        !fileName || fileName.includes("/") || fileName.includes("\\\\") ||
+        !fileName || fileName.includes("/") || fileName.includes("\\") ||
         !Number.isSafeInteger(size) || size <= 0 || size > 5 * 1024 * 1024 * 1024
       ) return json({ error: "Invalid upload metadata" }, 400);
       const extension = fileName.includes(".") ? fileName.split(".").pop()!.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) : "bin";
