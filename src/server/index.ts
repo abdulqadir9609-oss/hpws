@@ -1247,6 +1247,15 @@ async function handleMediaUpload(request: Request, env: Env, url: URL): Promise<
       }
       const upload = env.MEDIA_BUCKET.resumeMultipartUpload(key, uploadId);
       const object = await upload.complete(parts);
+      const expectedSize = Number(object.customMetadata?.expectedSize);
+      if (!Number.isSafeInteger(expectedSize) || object.size !== expectedSize) {
+        return json({
+          error: "Uploaded object size does not match the declared source size",
+          verified: false,
+          key,
+          size: object.size,
+        }, 409);
+      }
       return json({
         ok: true,
         verified: true,
