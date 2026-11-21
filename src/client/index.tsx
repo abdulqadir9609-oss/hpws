@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 type PendingDevice = {
@@ -72,6 +72,10 @@ function App() {
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [playingMedia, setPlayingMedia] = useState<{ key: string; url: string; contentType: string; fileName: string } | null>(null);
+  const [screenDeviceId, setScreenDeviceId] = useState("");
+  const [screenStatus, setScreenStatus] = useState("idle");
+  const [screenMessage, setScreenMessage] = useState("");
+  const screenSocket = useRef<WebSocket | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -140,6 +144,72 @@ function App() {
       setMediaError(err instanceof Error ? err.message : "Unable to open recording");
     } finally {
       setMediaBusy(false);
+    }
+  }
+
+  function closeScreenSocket(sendStop = false) {
+    const socket = screenSocket.current;
+    if (socket && socket.readyState === WebSocket.OPEN && sendStop) {
+      socket.send(JSON.stringify({ type: "screen-share-stop" }));
+    }
+    if (socket) {
+      socket.close();
+      screenSocket.current = null;
+    }
+  }
+
+  async function requestScreenShare() {
+    if (!screenDeviceId) {
+      setScreenMessage("Select an authorized phone first.");
+      return;
+    }
+    closeScreenSocket();
+    setScreenStatus("connecting");
+    setScreenMessage("Connecting securely to the selected phone…");
+    try {
+      const result = await api<{ ticket: string }>("ws-ticket/controller", token, { deviceId: screenDeviceId });
+      const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(`${scheme}//${window.location.host}/ws?ticket=${encodeURIComponent(result.ticket)}`);
+      screenSocket.current = socket;
+      socket.onopen = () => {
+        setScreenStatus("requesting");
+        setScreenMessage("Connected. Sending the screen-sharing request…");
+        socket.send(JSON.stringify({
+          type: "screen-share-request",
+          requestId: crypto.randomUUID(),
+        }));
+      };
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data)) as { type?: string; status?: string; message?: string };
+          if (message.type === "screen-share-status") {
+            const status = message.status || "unknown";
+            setScreenStatus(status);
+            const descriptions: Record<string, string> = {
+              "consent-required": "Open the phone app and approve Android’s screen-capture prompt.",
+              started: "The phone reports that screen sharing has started. Waiting for the live video stream.",
+              stopped: "Screen sharing has stopped.",
+              denied: "Screen sharing was declined on the phone.",
+              unsupported: "This phone app version does not support screen sharing yet.",
+              error: message.message || "The phone reported a screen-sharing error.",
+            };
+            setScreenMessage(descriptions[status] || message.message || `Phone status: ${status}`);
+          }
+        } catch {
+          setScreenMessage("Received an unreadable response from the phone.");
+        }
+      };
+      socket.onerror = () => {
+        setScreenStatus("error");
+        setScreenMessage("Secure connection failed. Check that the phone is online.");
+      };
+      socket.onclose = () => {
+        if (screenSocket.current === socket) screenSocket.current = null;
+        setScreenStatus((current) => current === "stopped" ? current : "disconnected");
+      };
+    } catch (err) {
+      setScreenStatus("error");
+      setScreenMessage(err instanceof Error ? err.message : "Unable to request screen sharing.");
     }
   }
 
@@ -376,10 +446,27 @@ function App() {
         )}
       </section>
 
-      <section className="hp-panel hp-limitation">
+      <section className="hp-panel">
         <p className="hp-eyebrow">REMOTE CONTROL</p>
         <h2>Live screen and screenshot</h2>
-        <p>Live screen viewing and screenshot requests are still awaiting the Android MediaProjection consent and WebRTC implementation. They are not enabled yet.</p>
+        <p className="hp-muted">Choose an authorized phone and request a screen-sharing session. The phone user must approve Android’s screen-capture prompt before any screen content can be shared.</p>
+        <label htmlFor="screen-device">Select phone</label>
+        <select id="screen-device" value={screenDeviceId} onChange={(event) => setScreenDeviceId(event.target.value)}>
+          <option value="">Choose an authorized device</option>
+          {devices.filter((device) => !device.revoked).map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>{device.label || "Android device"} · {device.deviceId}</option>
+          ))}
+        </select>
+        <div className="hp-actions">
+          <button className="hp-button hp-primary" onClick={() => void requestScreenShare()} disabled={!screenDeviceId || screenStatus === "connecting" || screenStatus === "requesting"}>
+            {screenStatus === "connecting" ? "Connecting…" : "Request screen sharing"}
+          </button>
+          <button className="hp-button hp-secondary" onClick={() => { closeScreenSocket(true); setScreenStatus("stopped"); setScreenMessage("Stop request sent. The phone will stop sharing when it receives it."); }} disabled={!screenSocket.current}>
+            Stop sharing
+          </button>
+        </div>
+        <p className="hp-muted" role="status">{screenMessage || "No screen-sharing session is active."}</p>
+        <p className="hp-footnote">Live video and in-controller screenshots become available after the Android screen-capture and WebRTC receiver are implemented. No screenshot is saved to the phone’s Gallery or Vault.</p>
       </section>
       <footer className="hp-footer">HP Web Controller · Secure administrator session</footer>
     </main>
