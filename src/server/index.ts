@@ -4,6 +4,7 @@ import { DurableObject } from "cloudflare:workers";
 interface Env extends Cloudflare.Env {
   DEVICE_REGISTRATION_SECRET: string;
   ASSETS: Fetcher;
+  MEDIA_BUCKET: R2Bucket;
 }
 
 type PendingDevice = {
@@ -273,6 +274,29 @@ export class Chat extends DurableObject<Env> {
       });
 
       return json({ online });
+    }
+
+    if (
+      url.pathname === "/internal/device-auth" &&
+      request.method === "POST"
+    ) {
+      const internalSecret = request.headers.get("X-Internal-Worker") || "";
+      if (!safeEqual(internalSecret, this.env.DEVICE_REGISTRATION_SECRET)) {
+        return json({ error: "Forbidden" }, 403);
+      }
+      const body = await bodyJson(request);
+      if (
+        typeof body?.deviceId !== "string" ||
+        !isValidDeviceId(body.deviceId) ||
+        typeof body?.token !== "string" ||
+        body.token.length < 32 ||
+        body.token.length > 256
+      ) return json({ error: "Invalid device credentials" }, 400);
+      const record = await this.ctx.storage.get<DeviceRecord>(`device:${body.deviceId}`);
+      if (!record || record.revoked || !safeEqual(record.tokenHash, await hash(body.token))) {
+        return json({ error: "Invalid device credentials" }, 401);
+      }
+      return json({ ok: true, deviceId: record.deviceId });
     }
 
     if (
@@ -1117,6 +1141,138 @@ export class Chat extends DurableObject<Env> {
   }
 }
 
+async function authorizeMediaDevice(
+  request: Request,
+  env: Env,
+): Promise<{ deviceId: string } | Response> {
+  const deviceId = request.headers.get("X-HP-Device-ID") || "";
+  const authorization = request.headers.get("Authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!isValidDeviceId(deviceId) || token.length < 32 || token.length > 256) {
+    return json({ error: "Device authentication required" }, 401);
+  }
+  const registry = env.Chat.get(env.Chat.idFromName("__hp_registry_v1__"));
+  const response = await registry.fetch(new Request("https://registry.internal/internal/device-auth", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Worker": env.DEVICE_REGISTRATION_SECRET,
+    },
+    body: JSON.stringify({ deviceId, token }),
+  }));
+  if (!response.ok) return json({ error: "Device authentication failed" }, 401);
+  return { deviceId };
+}
+
+function mediaCorsHeaders(): HeadersInit {
+  return {
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "https://hpws.webae.workers.dev",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-HP-Device-ID",
+  };
+}
+
+async function handleMediaUpload(request: Request, env: Env, url: URL): Promise<Response> {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: mediaCorsHeaders() });
+  }
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const auth = await authorizeMediaDevice(request, env);
+  if (auth instanceof Response) return auth;
+
+  try {
+    if (url.pathname === "/api/media/uploads/init") {
+      const body = await bodyJson(request);
+      const category = body?.category;
+      const contentType = typeof body?.contentType === "string" ? body.contentType.slice(0, 120) : "";
+      const fileName = typeof body?.fileName === "string" ? body.fileName.slice(0, 180) : "";
+      const size = body?.size;
+      if (
+        (category !== "audio_recordings" && category !== "video_recordings") ||
+        !/^(audio|video)\\/[a-zA-Z0-9.+-]+$/.test(contentType) ||
+        !fileName || /[/\\\\]/.test(fileName) ||
+        !Number.isSafeInteger(size) || size <= 0 || size > 5 * 1024 * 1024 * 1024
+      ) return json({ error: "Invalid upload metadata" }, 400);
+      const extension = fileName.includes(".") ? fileName.split(".").pop()!.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) : "bin";
+      const key = `${auth.deviceId}/${category}/${crypto.randomUUID()}.${extension || "bin"}`;
+      const upload = await env.MEDIA_BUCKET.createMultipartUpload(key, {
+        httpMetadata: { contentType },
+        customMetadata: {
+          deviceId: auth.deviceId,
+          category,
+          originalFileName: fileName,
+          expectedSize: String(size),
+        },
+      });
+      return json({ ok: true, key, uploadId: upload.uploadId, partSize: 16 * 1024 * 1024 });
+    }
+
+    if (url.pathname === "/api/media/uploads/part") {
+      const key = url.searchParams.get("key") || "";
+      const uploadId = url.searchParams.get("uploadId") || "";
+      const partNumber = Number(url.searchParams.get("partNumber"));
+      if (
+        !key.startsWith(`${auth.deviceId}/`) ||
+        !uploadId || uploadId.length > 1024 ||
+        !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000 ||
+        !request.body
+      ) return json({ error: "Invalid upload part request" }, 400);
+      const contentLength = Number(request.headers.get("Content-Length") || 0);
+      if (contentLength > 64 * 1024 * 1024) return json({ error: "Upload part exceeds 64 MiB" }, 413);
+      const upload = env.MEDIA_BUCKET.resumeMultipartUpload(key, uploadId);
+      const result = await upload.uploadPart(partNumber, request.body);
+      return json({ ok: true, partNumber, etag: result.etag });
+    }
+
+    if (url.pathname === "/api/media/uploads/complete") {
+      const body = await bodyJson(request);
+      const key = typeof body?.key === "string" ? body.key : "";
+      const uploadId = typeof body?.uploadId === "string" ? body.uploadId : "";
+      const rawParts = body?.parts;
+      if (!key.startsWith(`${auth.deviceId}/`) || !uploadId ||
+          !Array.isArray(rawParts) || rawParts.length < 1 || rawParts.length > 10000) {
+        return json({ error: "Invalid completion request" }, 400);
+      }
+      const parts: R2UploadedPart[] = [];
+      let previous = 0;
+      for (const part of rawParts) {
+        if (!Number.isInteger(part?.partNumber) || part.partNumber <= previous ||
+            part.partNumber > 10000 || typeof part?.etag !== "string" ||
+            part.etag.length < 1 || part.etag.length > 256) {
+          return json({ error: "Invalid uploaded part list" }, 400);
+        }
+        previous = part.partNumber;
+        parts.push({ partNumber: part.partNumber, etag: part.etag });
+      }
+      const upload = env.MEDIA_BUCKET.resumeMultipartUpload(key, uploadId);
+      const object = await upload.complete(parts);
+      return json({
+        ok: true,
+        verified: true,
+        key,
+        etag: object.etag,
+        size: object.size,
+        uploadedAt: new Date().toISOString(),
+      });
+    }
+
+    if (url.pathname === "/api/media/uploads/abort") {
+      const body = await bodyJson(request);
+      const key = typeof body?.key === "string" ? body.key : "";
+      const uploadId = typeof body?.uploadId === "string" ? body.uploadId : "";
+      if (!key.startsWith(`${auth.deviceId}/`) || !uploadId) {
+        return json({ error: "Invalid abort request" }, 400);
+      }
+      await env.MEDIA_BUCKET.resumeMultipartUpload(key, uploadId).abort();
+      return json({ ok: true, aborted: true });
+    }
+    return json({ error: "Not found" }, 404);
+  } catch {
+    return json({ error: "Media upload operation failed" }, 500);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -1127,6 +1283,10 @@ export default {
         service: "HP WEB Signaling",
         registrationApi: true,
       });
+    }
+
+    if (url.pathname.startsWith("/api/media/uploads/")) {
+      return handleMediaUpload(request, env, url);
     }
 
     if (url.pathname.startsWith("/api/")) {
