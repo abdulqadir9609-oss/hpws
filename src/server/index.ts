@@ -1141,6 +1141,119 @@ export class Chat extends DurableObject<Env> {
   }
 }
 
+async function mediaSignature(secret: string, value: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(value));
+  return base64url(new Uint8Array(signature));
+}
+
+async function handleAdminMedia(request: Request, env: Env, url: URL): Promise<Response> {
+  const authorization = request.headers.get("Authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!await verifyAdmin(token, env.DEVICE_REGISTRATION_SECRET)) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+
+  if (url.pathname === "/api/media") {
+    if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+    const deviceIdValue = url.searchParams.get("deviceId") || "";
+    if (!isValidDeviceId(deviceIdValue)) return json({ error: "Invalid device ID" }, 400);
+    const prefix = `${deviceIdValue}/`;
+    const listed = await env.MEDIA_BUCKET.list({ prefix, limit: 1000 });
+    const media = listed.objects.map((object) => ({
+      key: object.key,
+      size: object.size,
+      uploadedAt: object.uploaded,
+      etag: object.etag,
+      category: object.key.split("/")[1] || "recordings",
+      fileName: object.customMetadata?.originalFileName || object.key.split("/").pop() || "recording",
+      contentType: object.httpMetadata?.contentType || "application/octet-stream",
+    }));
+    return json({ media, truncated: listed.truncated });
+  }
+
+  if (url.pathname === "/api/media/access") {
+    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    const body = await bodyJson(request);
+    const key = typeof body?.key === "string" ? body.key : "";
+    const deviceIdValue = typeof body?.deviceId === "string" ? body.deviceId : "";
+    if (!isValidDeviceId(deviceIdValue) || !key.startsWith(`${deviceIdValue}/`) ||
+        key.length > 1024 || key.includes("..")) {
+      return json({ error: "Invalid media key" }, 400);
+    }
+    const object = await env.MEDIA_BUCKET.head(key);
+    if (!object) return json({ error: "Media not found" }, 404);
+    const expires = Date.now() + 5 * 60 * 1000;
+    const payload = `${key}\n${expires}`;
+    const signature = await mediaSignature(env.DEVICE_REGISTRATION_SECRET, payload);
+    return json({
+      url: `/media/file?key=${encodeURIComponent(key)}&expires=${expires}&sig=${encodeURIComponent(signature)}`,
+      expiresAt: expires,
+    });
+  }
+  return json({ error: "Not found" }, 404);
+}
+
+async function serveSignedMedia(request: Request, env: Env, url: URL): Promise<Response> {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+  const key = url.searchParams.get("key") || "";
+  const expires = Number(url.searchParams.get("expires"));
+  const signature = url.searchParams.get("sig") || "";
+  const first = key.split("/")[0] || "";
+  if (!isValidDeviceId(first) || !key.startsWith(`${first}/`) ||
+      !Number.isSafeInteger(expires) || expires <= Date.now() ||
+      expires > Date.now() + 6 * 60 * 1000 || !signature) {
+    return new Response("Invalid or expired media link", { status: 403 });
+  }
+  const expected = await mediaSignature(env.DEVICE_REGISTRATION_SECRET, `${key}\n${expires}`);
+  if (!safeEqual(signature, expected)) return new Response("Invalid media link", { status: 403 });
+
+  const head = await env.MEDIA_BUCKET.head(key);
+  if (!head) return new Response("Media not found", { status: 404 });
+  const rangeHeader = request.headers.get("Range");
+  let object: R2ObjectBody | null;
+  let status = 200;
+  const headers = new Headers();
+  if (rangeHeader) {
+    const match = /^bytes=(\\d*)-(\\d*)$/.exec(rangeHeader);
+    if (!match || (!match[1] && !match[2])) {
+      return new Response("Invalid range", { status: 416, headers: { "Content-Range": `bytes */${head.size}` } });
+    }
+    let start: number;
+    let end: number;
+    if (!match[1]) {
+      const suffix = Number(match[2]);
+      if (!Number.isSafeInteger(suffix) || suffix <= 0) return new Response(null, { status: 416 });
+      start = Math.max(0, head.size - suffix);
+      end = head.size - 1;
+    } else {
+      start = Number(match[1]);
+      end = match[2] ? Math.min(Number(match[2]), head.size - 1) : head.size - 1;
+    }
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start > end || start >= head.size) {
+      return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${head.size}` } });
+    }
+    object = await env.MEDIA_BUCKET.get(key, { range: { offset: start, length: end - start + 1 } });
+    status = 206;
+    headers.set("Content-Range", `bytes ${start}-${end}/${head.size}`);
+    headers.set("Content-Length", String(end - start + 1));
+  } else {
+    object = await env.MEDIA_BUCKET.get(key);
+    headers.set("Content-Length", String(head.size));
+  }
+  if (!object) return new Response("Media not found", { status: 404 });
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Content-Type", head.httpMetadata?.contentType || "application/octet-stream");
+  headers.set("Content-Disposition", `inline; filename="${(head.customMetadata?.originalFileName || key.split("/").pop() || "recording").replace(/["\\\\\r\n]/g, "_")}"`);
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("ETag", head.httpEtag);
+  return new Response(request.method === "HEAD" ? null : object.body, { status, headers });
+}
+
 async function authorizeMediaDevice(
   request: Request,
   env: Env,
@@ -1302,6 +1415,14 @@ export default {
       const registryId = env.Chat.idFromName("__hp_registry_v1__");
       const registry = env.Chat.get(registryId);
       return registry.fetch(request);
+    }
+
+    if (url.pathname === "/api/media" || url.pathname === "/api/media/access") {
+      return handleAdminMedia(request, env, url);
+    }
+
+    if (url.pathname === "/media/file") {
+      return serveSignedMedia(request, env, url);
     }
 
     if (url.pathname === "/ws") {
