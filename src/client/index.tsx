@@ -167,8 +167,7 @@ function App() {
     try { screenPeer.current?.close(); } catch {}
     screenPeer.current = null;
     if (socket) {
-      window.setTimeout(() => socket.close(), sendStop ? 250 : 0);
-      screenSocket.current = null;
+      if (!sendStop) { socket.close(); screenSocket.current = null; }
     }
   }
 
@@ -509,7 +508,7 @@ function App() {
           <button className="hp-button hp-primary" onClick={() => void requestScreenShare()} disabled={!screenDeviceId || screenStatus === "connecting" || screenStatus === "requesting"}>
             {screenStatus === "connecting" ? "Connecting…" : "Request screen sharing"}
           </button>
-          <button className="hp-button hp-secondary" onClick={() => { closeScreenSocket(true); setScreenStatus("stopped"); setScreenMessage("Stop request sent. The phone will stop sharing when it receives it."); }} disabled={!screenSocket.current}>
+          <button className="hp-button hp-secondary" onClick={() => { closeScreenSocket(true); setScreenStatus("stopping"); setScreenMessage("Stop request sent. Waiting for the phone to confirm capture has stopped…"); }} disabled={!screenSocket.current}>
             Stop sharing
           </button>
         </div>
