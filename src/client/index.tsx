@@ -75,7 +75,17 @@ function App() {
   const [screenDeviceId, setScreenDeviceId] = useState("");
   const [screenStatus, setScreenStatus] = useState("idle");
   const [screenMessage, setScreenMessage] = useState("");
-  const screenSocket = useRef<WebSocket | null>(null);\n  const screenPeer = useRef<RTCPeerConnection | null>(null);\n  const screenChannel = useRef<RTCDataChannel | null>(null);\n  const screenRequestId = useRef<string>("");\n  const [liveFrame, setLiveFrame] = useState("");\n  const [screenShot, setScreenShot] = useState("");
+  const screenSocket = useRef<WebSocket | null>(null);
+  const screenPeer = useRef<RTCPeerConnection | null>(null);
+  const screenChannel = useRef<RTCDataChannel | null>(null);
+  const screenRequestId = useRef("");
+  const [liveFrame, setLiveFrame] = useState("");
+  const [screenShot, setScreenShot] = useState("");
+  const screenPeer = useRef<RTCPeerConnection | null>(null);
+  const screenChannel = useRef<RTCDataChannel | null>(null);
+  const screenRequestId = useRef<string>("");
+  const [liveFrame, setLiveFrame] = useState("");
+  const [screenShot, setScreenShot] = useState("");
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -149,11 +159,15 @@ function App() {
 
   function closeScreenSocket(sendStop = false) {
     const socket = screenSocket.current;
-    if (socket && socket.readyState === WebSocket.OPEN && sendStop) {
-      socket.send(JSON.stringify({ type: "screen-share-stop" }));
+    if (socket && socket.readyState === WebSocket.OPEN && sendStop && screenRequestId.current) {
+      socket.send(JSON.stringify({ type: "screen-share-stop", requestId: screenRequestId.current }));
     }
+    try { screenChannel.current?.close(); } catch {}
+    screenChannel.current = null;
+    try { screenPeer.current?.close(); } catch {}
+    screenPeer.current = null;
     if (socket) {
-      socket.close();
+      window.setTimeout(() => socket.close(), sendStop ? 250 : 0);
       screenSocket.current = null;
     }
   }
@@ -164,6 +178,8 @@ function App() {
       return;
     }
     closeScreenSocket();
+    setLiveFrame("");
+    setScreenShot("");
     setScreenStatus("connecting");
     setScreenMessage("Connecting securely to the selected phone…");
     try {
@@ -171,18 +187,50 @@ function App() {
       const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
       const socket = new WebSocket(`${scheme}//${window.location.host}/ws?ticket=${encodeURIComponent(result.ticket)}`);
       screenSocket.current = socket;
-      socket.onopen = () => {
+      socket.onopen = async () => {
         setScreenStatus("requesting");
         setScreenMessage("Connected. Sending the screen-sharing request…");
-        socket.send(JSON.stringify({
-          type: "screen-share-request",
-          requestId: crypto.randomUUID(),
-        }));
+        const requestId = crypto.randomUUID();
+        screenRequestId.current = requestId;
+        socket.send(JSON.stringify({ type: "screen-share-request", requestId }));
+        try {
+          const pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] });
+          screenPeer.current = pc;
+          const channel = pc.createDataChannel("hp-screen", { ordered: true });
+          screenChannel.current = channel;
+          channel.onopen = () => setScreenMessage("Secure screen data channel connected. Waiting for approved screen frames…");
+          channel.onmessage = (message) => {
+            const value = String(message.data || "");
+            if (value.startsWith("HP_FRAME:")) setLiveFrame("data:image/jpeg;base64," + value.slice(9));
+            if (value.startsWith("HP_SCREENSHOT:")) setScreenShot("data:image/jpeg;base64," + value.slice(13));
+          };
+          pc.onicecandidate = (event) => {
+            if (event.candidate && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "candidate", candidate: event.candidate.toJSON() }));
+            }
+          };
+          pc.onconnectionstatechange = () => {
+            if (pc.connectionState === "failed") {
+              setScreenStatus("error");
+              setScreenMessage("WebRTC connection failed. Check phone connectivity and retry.");
+            }
+          };
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
+        } catch (err) {
+          setScreenStatus("error");
+          setScreenMessage(err instanceof Error ? err.message : "Unable to start WebRTC screen transport.");
+        }
       };
       socket.onmessage = (event) => {
         try {
-          const message = JSON.parse(String(event.data)) as { type?: string; status?: string; message?: string };
-          if (message.type === "screen-share-status") {
+          const message = JSON.parse(String(event.data)) as { type?: string; status?: string; message?: string; sdp?: string; candidate?: RTCIceCandidateInit };
+          if (message.type === "answer" && message.sdp && screenPeer.current) {
+            void screenPeer.current.setRemoteDescription({ type: "answer", sdp: message.sdp });
+          } else if (message.type === "candidate" && message.candidate && screenPeer.current) {
+            void screenPeer.current.addIceCandidate(message.candidate).catch(() => {});
+          } else if (message.type === "screen-share-status") {
             const status = message.status || "unknown";
             setScreenStatus(status);
             const descriptions: Record<string, string> = {
@@ -466,7 +514,12 @@ function App() {
           </button>
         </div>
         <p className="hp-muted" role="status">{screenMessage || "No screen-sharing session is active."}</p>
-        <p className="hp-footnote">Live video and in-controller screenshots become available after the Android screen-capture and WebRTC receiver are implemented. No screenshot is saved to the phone’s Gallery or Vault.</p>
+        <div className="hp-actions">
+          <button className="hp-button hp-secondary" disabled={!screenChannel.current || screenChannel.current.readyState !== "open"} onClick={() => screenChannel.current?.send("HP_SCREENSHOT_REQUEST")}>Capture screenshot</button>
+        </div>
+        {liveFrame && <div className="hp-media-player"><h3>Live phone screen</h3><img src={liveFrame} alt="Live phone screen" style={{ width: "100%", maxHeight: "70vh", objectFit: "contain", background: "#000" }} /></div>}
+        {screenShot && <div className="hp-media-player"><h3>Controller screenshot</h3><img src={screenShot} alt="Captured phone screen" style={{ width: "100%", maxHeight: "70vh", objectFit: "contain", background: "#000" }} /></div>}
+        <p className="hp-footnote">Screen frames and screenshots are displayed in this Controller session; they are not saved to the phone’s Gallery or Vault.</p>
       </section>
       <footer className="hp-footer">HP Web Controller · Secure administrator session</footer>
     </main>
