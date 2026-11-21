@@ -79,6 +79,7 @@ function App() {
   const screenPeer = useRef<RTCPeerConnection | null>(null);
   const screenChannel = useRef<RTCDataChannel | null>(null);
   const screenRequestId = useRef("");
+  const screenFrameBuffers = useRef(new Map<string, { kind: string; total: number; chunks: string[] }>());
   const [liveFrame, setLiveFrame] = useState("");
   const [screenShot, setScreenShot] = useState("");
   const screenPeer = useRef<RTCPeerConnection | null>(null);
@@ -200,8 +201,31 @@ function App() {
           channel.onopen = () => setScreenMessage("Secure screen data channel connected. Waiting for approved screen frames…");
           channel.onmessage = (message) => {
             const value = String(message.data || "");
-            if (value.startsWith("HP_FRAME:")) setLiveFrame("data:image/jpeg;base64," + value.slice(9));
-            if (value.startsWith("HP_SCREENSHOT:")) setScreenShot("data:image/jpeg;base64," + value.slice(13));
+            if (value.startsWith("HP_BEGIN|")) {
+              const [, kind, id, totalRaw] = value.split("|");
+              const total = Number(totalRaw);
+              if (id && Number.isInteger(total) && total > 0 && total < 2000) {
+                screenFrameBuffers.current.set(id, { kind, total, chunks: new Array(total) });
+              }
+              return;
+            }
+            if (value.startsWith("HP_PART|")) {
+              const first = value.indexOf("|", 8);
+              const second = value.indexOf("|", first + 1);
+              if (first < 0 || second < 0) return;
+              const id = value.slice(8, first);
+              const index = Number(value.slice(first + 1, second));
+              const chunk = value.slice(second + 1);
+              const buffer = screenFrameBuffers.current.get(id);
+              if (!buffer || !Number.isInteger(index) || index < 0 || index >= buffer.total) return;
+              buffer.chunks[index] = chunk;
+              if (buffer.chunks.every((part) => typeof part === "string")) {
+                const dataUrl = "data:image/jpeg;base64," + buffer.chunks.join("");
+                if (buffer.kind === "SCREENSHOT") setScreenShot(dataUrl);
+                else setLiveFrame(dataUrl);
+                screenFrameBuffers.current.delete(id);
+              }
+            }
           };
           pc.onicecandidate = (event) => {
             if (event.candidate && socket.readyState === WebSocket.OPEN) {
