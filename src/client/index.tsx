@@ -265,6 +265,7 @@ function App() {
               error: message.message || "The phone reported a screen-sharing error.",
             };
             setScreenMessage(descriptions[status] || message.message || `Phone status: ${status}`);
+            if (status === "stopped") closeScreenSocket(false);
           }
         } catch {
           setScreenMessage("Received an unreadable response from the phone.");
