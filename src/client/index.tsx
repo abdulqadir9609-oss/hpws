@@ -75,7 +75,7 @@ function App() {
   const [screenDeviceId, setScreenDeviceId] = useState("");
   const [screenStatus, setScreenStatus] = useState("idle");
   const [screenMessage, setScreenMessage] = useState("");
-  const screenSocket = useRef<WebSocket | null>(null);
+  const screenSocket = useRef<WebSocket | null>(null);\n  const screenPeer = useRef<RTCPeerConnection | null>(null);\n  const screenChannel = useRef<RTCDataChannel | null>(null);\n  const screenRequestId = useRef<string>("");\n  const [liveFrame, setLiveFrame] = useState("");\n  const [screenShot, setScreenShot] = useState("");
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -187,7 +187,7 @@ function App() {
             setScreenStatus(status);
             const descriptions: Record<string, string> = {
               "consent-required": "Open the phone app and approve Android’s screen-capture prompt.",
-              started: "The phone reports that screen sharing has started. Waiting for the live video stream.",
+              started: "The phone confirms capture is active. Establishing the live screen feed…",
               stopped: "Screen sharing has stopped.",
               denied: "Screen sharing was declined on the phone.",
               unsupported: "This phone app version does not support screen sharing yet.",
