@@ -71,7 +71,16 @@ export function validateSignalingMessage(value: unknown): Record<string, unknown
       typeof data.status !== "string" ||
       !allowed.includes(data.status)
     ) return null;
-    return { type: "screen-share-status", requestId: data.requestId, status: data.status };
+    const result: Record<string, unknown> = {
+      type: "screen-share-status",
+      requestId: data.requestId,
+      status: data.status,
+    };
+    if (data.message !== undefined) {
+      if (typeof data.message !== "string" || data.message.length > 500) return null;
+      result.message = data.message;
+    }
+    return result;
   }
 
   return null;
