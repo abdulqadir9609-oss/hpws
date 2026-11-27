@@ -58,5 +58,66 @@ export function validateSignalingMessage(value: unknown): Record<string, unknown
     return normalized;
   }
 
+  if (data.type === "media-request") {
+    if (
+      (data.media !== "audio" && data.media !== "video") ||
+      typeof data.requestId !== "string" ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(data.requestId)
+    ) return null;
+
+    return {
+      type: "media-request",
+      media: data.media,
+      requestId: data.requestId,
+    };
+  }
+
+  if (data.type === "media-stop") {
+    if (
+      typeof data.requestId !== "string" ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(data.requestId)
+    ) return null;
+
+    return { type: "media-stop", requestId: data.requestId };
+  }
+
+  if (data.type === "media-status") {
+    const allowedStatuses = [
+      "approval-required",
+      "approved",
+      "denied",
+      "starting",
+      "active",
+      "stopped",
+      "error",
+    ];
+
+    if (
+      typeof data.requestId !== "string" ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(data.requestId) ||
+      typeof data.status !== "string" ||
+      !allowedStatuses.includes(data.status)
+    ) return null;
+
+    if (
+      data.media !== undefined &&
+      data.media !== "audio" &&
+      data.media !== "video"
+    ) return null;
+
+    if (
+      data.message !== undefined &&
+      (typeof data.message !== "string" || data.message.length > 500)
+    ) return null;
+
+    return {
+      type: "media-status",
+      requestId: data.requestId,
+      status: data.status,
+      ...(data.media !== undefined ? { media: data.media } : {}),
+      ...(data.message !== undefined ? { message: data.message } : {}),
+    };
+  }
+
   return null;
 }

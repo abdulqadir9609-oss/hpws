@@ -1082,6 +1082,17 @@ export class Chat extends DurableObject<Env> {
       return;
     }
 
+    // Media controls are directional: only the controller can request or
+    // stop capture; only the phone can report its permission/capture status.
+    if (
+      ((validated.type === "media-request" || validated.type === "media-stop") &&
+        sender.role !== "controller") ||
+      (validated.type === "media-status" && sender.role !== "phone")
+    ) {
+      ws.close(1008, "Invalid media-control direction");
+      return;
+    }
+
     for (const peer of this.ctx.getWebSockets()) {
       if (peer === ws) continue;
 

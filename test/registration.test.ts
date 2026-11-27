@@ -88,6 +88,132 @@ describe("WebRTC signaling payload validation", () => {
     expect(validate(null)).toBeNull();
     expect(validate([])).toBeNull();
   });
+
+  it("accepts valid remote media requests and stop commands", () => {
+    const requestId = "request-12345678";
+
+    expect(validate({
+      type: "media-request",
+      media: "video",
+      requestId,
+    })).toEqual({
+      type: "media-request",
+      media: "video",
+      requestId,
+    });
+
+    expect(validate({
+      type: "media-request",
+      media: "audio",
+      requestId,
+    })).toEqual({
+      type: "media-request",
+      media: "audio",
+      requestId,
+    });
+
+    expect(validate({
+      type: "media-stop",
+      requestId,
+    })).toEqual({
+      type: "media-stop",
+      requestId,
+    });
+  });
+
+  it("rejects invalid media requests and stop commands", () => {
+    expect(validate({
+      type: "media-request",
+      media: "screen",
+      requestId: "request-12345678",
+    })).toBeNull();
+
+    expect(validate({
+      type: "media-request",
+      media: "video",
+      requestId: "short",
+    })).toBeNull();
+
+    expect(validate({
+      type: "media-request",
+      media: "video",
+      requestId: "invalid id with spaces",
+    })).toBeNull();
+
+    expect(validate({
+      type: "media-stop",
+      requestId: "",
+    })).toBeNull();
+  });
+
+  it("accepts valid media permission and capture status updates", () => {
+    const statuses = [
+      "approval-required",
+      "approved",
+      "denied",
+      "starting",
+      "active",
+      "stopped",
+      "error",
+    ];
+
+    for (const status of statuses) {
+      expect(validate({
+        type: "media-status",
+        requestId: "request-12345678",
+        status,
+        media: "video",
+      })).toEqual({
+        type: "media-status",
+        requestId: "request-12345678",
+        status,
+        media: "video",
+      });
+    }
+
+    expect(validate({
+      type: "media-status",
+      requestId: "request-12345678",
+      status: "error",
+      message: "Camera permission denied",
+    })).toEqual({
+      type: "media-status",
+      requestId: "request-12345678",
+      status: "error",
+      message: "Camera permission denied",
+    });
+  });
+
+  it("rejects invalid media status updates", () => {
+    const requestId = "request-12345678";
+
+    expect(validate({
+      type: "media-status",
+      requestId,
+      status: "unknown",
+    })).toBeNull();
+
+    expect(validate({
+      type: "media-status",
+      requestId,
+      status: "active",
+      media: "screen",
+    })).toBeNull();
+
+    expect(validate({
+      type: "media-status",
+      requestId,
+      status: "error",
+      message: "x".repeat(501),
+    })).toBeNull();
+
+    expect(validate({
+      type: "media-status",
+      requestId: "short",
+      status: "active",
+    })).toBeNull();
+  });
+
 });
 
 describe("HPWS Device Registration and Security", () => {

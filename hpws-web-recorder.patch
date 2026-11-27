@@ -1,0 +1,349 @@
+diff --git a/public/styles.css b/public/styles.css
+index 4121fa3..7ddb6c5 100644
+--- a/public/styles.css
++++ b/public/styles.css
+@@ -1 +1,2 @@
+-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e8edf7;background:#0a1020;font-synthesis:none;text-rendering:optimizeLegibility}*{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#17294a 0,transparent 42%),#0a1020}.hp-shell{width:min(1120px,calc(100% - 36px));margin:0 auto;padding:38px 0 28px}.hp-header,.hp-brand,.hp-header-actions,.hp-section-heading,.hp-device,.hp-device-title,.hp-actions{display:flex;align-items:center}.hp-header,.hp-section-heading,.hp-device{justify-content:space-between;gap:18px}.hp-brand{gap:15px}.hp-mark{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(135deg,#8db8ff,#4f75e9);color:#071226;font-weight:900;letter-spacing:-1px}.hp-eyebrow{font-size:10px;letter-spacing:.17em;font-weight:800;color:#88a8dd;margin:0 0 5px}.hp-header h1,.hp-login h1{font-size:25px;letter-spacing:-.04em;margin:0}.hp-header-actions,.hp-actions{gap:9px}.hp-button{border:1px solid transparent;border-radius:10px;padding:10px 15px;font-weight:700;font-size:13px;cursor:pointer;transition:.15s}.hp-button:disabled{opacity:.5;cursor:not-allowed}.hp-primary{background:#7298f6;color:#081327}.hp-secondary{background:#1b2b49;color:#e4edff;border-color:#2d4267}.hp-quiet{background:transparent;color:#aab8d1;border-color:#34415a}.hp-danger{background:#3b202b;color:#ffb8c2;border-color:#663341}.hp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:28px 0 18px}.hp-stat,.hp-panel,.hp-login{background:rgba(18,29,50,.88);border:1px solid #263753;border-radius:17px}.hp-stat{padding:18px 20px}.hp-stat span,.hp-device-main>span{display:block;color:#91a2bd;font-size:12px}.hp-stat strong{display:block;font-size:28px;margin-top:8px}.hp-panel{padding:22px;margin:15px 0}.hp-section-heading{margin-bottom:15px}.hp-section-heading h2,.hp-limitation h2{font-size:18px;margin:0;letter-spacing:-.02em}.hp-count{border-radius:999px;padding:5px 10px;background:#203657;color:#a9c5ff;font-size:12px;font-weight:800}.hp-empty{padding:22px;border:1px dashed #354762;border-radius:12px;color:#9aaac3;font-size:13px}.hp-list{display:grid;gap:10px}.hp-device{padding:15px 16px;border:1px solid #2a3b57;border-radius:12px;background:#111e33}.hp-device-main{min-width:0;display:grid;gap:6px}.hp-device-main strong{font-size:14px}.hp-device-main code,.hp-device-id{font-size:11px;color:#8fa7cd;overflow-wrap:anywhere}.hp-device-title{gap:10px;flex-wrap:wrap}.hp-status{font-size:10px;font-weight:800;padding:4px 8px;border-radius:999px}.hp-status-on{background:#153a35;color:#8de1c2}.hp-status-off{background:#43232e;color:#ffabb8}.hp-alert{padding:12px 15px;border-radius:10px;font-size:13px}.hp-error{background:#3c202a;border:1px solid #713744;color:#ffc0c8}.hp-success{background:#15372f;border:1px solid #28604f;color:#a5efd4}.hp-limitation{background:rgba(21,34,55,.58)}.hp-limitation p:last-child,.hp-muted,.hp-footnote{color:#9aabc5;font-size:13px;line-height:1.65}.hp-footer{text-align:center;color:#667995;font-size:11px;padding:16px}.hp-login{width:min(440px,100%);margin:9vh auto 0;padding:30px}.hp-login .hp-mark{margin-bottom:24px}.hp-muted{margin:10px 0 24px}.hp-form{display:grid;gap:10px}.hp-form label{font-size:12px;font-weight:700;color:#b8c8e1}.hp-form input{width:100%;padding:13px 14px;border-radius:10px;border:1px solid #354965;background:#0c1729;color:#f3f6ff;font:inherit;outline:none}.hp-form input:focus{border-color:#83a7ff;box-shadow:0 0 0 3px #547ad52b}.hp-form button{padding:13px;border:0;border-radius:10px;background:#7298f6;color:#071327;font-weight:800;cursor:pointer}.hp-footnote{font-size:11px;margin:18px 0 0}.hp-login .hp-alert{margin-top:16px}@media(max-width:700px){.hp-stats{grid-template-columns:repeat(2,1fr)}.hp-shell{width:min(100% - 24px,560px);padding-top:22px}.hp-header{align-items:flex-start;flex-direction:column}.hp-header-actions{width:100%}.hp-header-actions button{flex:1}.hp-stats{gap:8px}.hp-stat{padding:13px 12px}.hp-stat span{font-size:10px}.hp-stat strong{font-size:22px}.hp-panel{padding:16px}.hp-device{align-items:flex-start;flex-direction:column}.hp-actions{width:100%}.hp-actions button{flex:1}.hp-login{margin-top:6vh;padding:23px}}
+\ No newline at end of file
++:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e8edf7;background:#0a1020;font-synthesis:none;text-rendering:optimizeLegibility}*{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#17294a 0,transparent 42%),#0a1020}.hp-shell{width:min(1120px,calc(100% - 36px));margin:0 auto;padding:38px 0 28px}.hp-header,.hp-brand,.hp-header-actions,.hp-section-heading,.hp-device,.hp-device-title,.hp-actions{display:flex;align-items:center}.hp-header,.hp-section-heading,.hp-device{justify-content:space-between;gap:18px}.hp-brand{gap:15px}.hp-mark{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(135deg,#8db8ff,#4f75e9);color:#071226;font-weight:900;letter-spacing:-1px}.hp-eyebrow{font-size:10px;letter-spacing:.17em;font-weight:800;color:#88a8dd;margin:0 0 5px}.hp-header h1,.hp-login h1{font-size:25px;letter-spacing:-.04em;margin:0}.hp-header-actions,.hp-actions{gap:9px}.hp-button{border:1px solid transparent;border-radius:10px;padding:10px 15px;font-weight:700;font-size:13px;cursor:pointer;transition:.15s}.hp-button:disabled{opacity:.5;cursor:not-allowed}.hp-primary{background:#7298f6;color:#081327}.hp-secondary{background:#1b2b49;color:#e4edff;border-color:#2d4267}.hp-quiet{background:transparent;color:#aab8d1;border-color:#34415a}.hp-danger{background:#3b202b;color:#ffb8c2;border-color:#663341}.hp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:28px 0 18px}.hp-stat,.hp-panel,.hp-login{background:rgba(18,29,50,.88);border:1px solid #263753;border-radius:17px}.hp-stat{padding:18px 20px}.hp-stat span,.hp-device-main>span{display:block;color:#91a2bd;font-size:12px}.hp-stat strong{display:block;font-size:28px;margin-top:8px}.hp-panel{padding:22px;margin:15px 0}.hp-section-heading{margin-bottom:15px}.hp-section-heading h2,.hp-limitation h2{font-size:18px;margin:0;letter-spacing:-.02em}.hp-count{border-radius:999px;padding:5px 10px;background:#203657;color:#a9c5ff;font-size:12px;font-weight:800}.hp-empty{padding:22px;border:1px dashed #354762;border-radius:12px;color:#9aaac3;font-size:13px}.hp-list{display:grid;gap:10px}.hp-device{padding:15px 16px;border:1px solid #2a3b57;border-radius:12px;background:#111e33}.hp-device-main{min-width:0;display:grid;gap:6px}.hp-device-main strong{font-size:14px}.hp-device-main code,.hp-device-id{font-size:11px;color:#8fa7cd;overflow-wrap:anywhere}.hp-device-title{gap:10px;flex-wrap:wrap}.hp-status{font-size:10px;font-weight:800;padding:4px 8px;border-radius:999px}.hp-status-on{background:#153a35;color:#8de1c2}.hp-status-off{background:#43232e;color:#ffabb8}.hp-alert{padding:12px 15px;border-radius:10px;font-size:13px}.hp-error{background:#3c202a;border:1px solid #713744;color:#ffc0c8}.hp-success{background:#15372f;border:1px solid #28604f;color:#a5efd4}.hp-limitation{background:rgba(21,34,55,.58)}.hp-limitation p:last-child,.hp-muted,.hp-footnote{color:#9aabc5;font-size:13px;line-height:1.65}.hp-footer{text-align:center;color:#667995;font-size:11px;padding:16px}.hp-login{width:min(440px,100%);margin:9vh auto 0;padding:30px}.hp-login .hp-mark{margin-bottom:24px}.hp-muted{margin:10px 0 24px}.hp-form{display:grid;gap:10px}.hp-form label{font-size:12px;font-weight:700;color:#b8c8e1}.hp-form input{width:100%;padding:13px 14px;border-radius:10px;border:1px solid #354965;background:#0c1729;color:#f3f6ff;font:inherit;outline:none}.hp-form input:focus{border-color:#83a7ff;box-shadow:0 0 0 3px #547ad52b}.hp-form button{padding:13px;border:0;border-radius:10px;background:#7298f6;color:#071327;font-weight:800;cursor:pointer}.hp-footnote{font-size:11px;margin:18px 0 0}.hp-login .hp-alert{margin-top:16px}@media(max-width:700px){.hp-stats{grid-template-columns:repeat(2,1fr)}.hp-shell{width:min(100% - 24px,560px);padding-top:22px}.hp-header{align-items:flex-start;flex-direction:column}.hp-header-actions{width:100%}.hp-header-actions button{flex:1}.hp-stats{gap:8px}.hp-stat{padding:13px 12px}.hp-stat span{font-size:10px}.hp-stat strong{font-size:22px}.hp-panel{padding:16px}.hp-device{align-items:flex-start;flex-direction:column}.hp-actions{width:100%}.hp-actions button{flex:1}.hp-login{margin-top:6vh;padding:23px}}
++.hp-recorder-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.8fr);gap:18px;align-items:start}.hp-camera-preview{width:100%;aspect-ratio:16/9;object-fit:contain;background:#050a13;border:1px solid #2a3b57;border-radius:12px;display:block}.hp-recorder-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.hp-recorder-actions{display:grid;gap:10px}.hp-recorder-actions label{font-size:12px;font-weight:700;color:#b8c8e1}.hp-recorder-actions select{padding:11px;border-radius:9px;border:1px solid #354965;background:#0c1729;color:#f3f6ff;font:inherit}.hp-recorder-status{font-size:13px;color:#a5efd4}.hp-recordings-heading{margin-top:24px}@media(max-width:760px){.hp-recorder-grid{grid-template-columns:1fr}.hp-recorder-controls .hp-button{flex:1}}
+diff --git a/src/client/index.tsx b/src/client/index.tsx
+index 6a2f845..9a51fb8 100644
+--- a/src/client/index.tsx
++++ b/src/client/index.tsx
+@@ -47,6 +47,326 @@ function dateLabel(value: number | null): string {
+   return new Date(value).toLocaleString();
+ }
+ 
++
++type LocalRecording = {
++  id: string;
++  name: string;
++  mimeType: string;
++  size: number;
++  createdAt: number;
++  blob: Blob;
++};
++
++const RECORDINGS_DB = "hp-web-local-recordings";
++const RECORDINGS_STORE = "recordings";
++
++function openRecordingsDb(): Promise<IDBDatabase> {
++  return new Promise((resolve, reject) => {
++    const request = indexedDB.open(RECORDINGS_DB, 1);
++    request.onupgradeneeded = () => {
++      const db = request.result;
++      if (!db.objectStoreNames.contains(RECORDINGS_STORE)) {
++        db.createObjectStore(RECORDINGS_STORE, { keyPath: "id" });
++      }
++    };
++    request.onsuccess = () => resolve(request.result);
++    request.onerror = () => reject(request.error || new Error("Unable to open local recording storage"));
++  });
++}
++
++async function saveLocalRecording(item: LocalRecording): Promise<void> {
++  const db = await openRecordingsDb();
++  await new Promise<void>((resolve, reject) => {
++    const tx = db.transaction(RECORDINGS_STORE, "readwrite");
++    tx.objectStore(RECORDINGS_STORE).put(item);
++    tx.oncomplete = () => resolve();
++    tx.onerror = () => reject(tx.error || new Error("Unable to save recording locally"));
++    tx.onabort = () => reject(tx.error || new Error("Local recording save was interrupted"));
++  });
++  db.close();
++}
++
++async function loadLocalRecordings(): Promise<LocalRecording[]> {
++  const db = await openRecordingsDb();
++  const items = await new Promise<LocalRecording[]>((resolve, reject) => {
++    const request = db.transaction(RECORDINGS_STORE, "readonly")
++      .objectStore(RECORDINGS_STORE).getAll();
++    request.onsuccess = () => resolve((request.result as LocalRecording[]).sort((a, b) => b.createdAt - a.createdAt));
++    request.onerror = () => reject(request.error || new Error("Unable to read local recordings"));
++  });
++  db.close();
++  return items;
++}
++
++async function deleteLocalRecording(id: string): Promise<void> {
++  const db = await openRecordingsDb();
++  await new Promise<void>((resolve, reject) => {
++    const tx = db.transaction(RECORDINGS_STORE, "readwrite");
++    tx.objectStore(RECORDINGS_STORE).delete(id);
++    tx.oncomplete = () => resolve();
++    tx.onerror = () => reject(tx.error || new Error("Unable to delete local recording"));
++  });
++  db.close();
++}
++
++function WebRecorder() {
++  const previewRef = React.useRef<HTMLVideoElement>(null);
++  const streamRef = React.useRef<MediaStream | null>(null);
++  const recorderRef = React.useRef<MediaRecorder | null>(null);
++  const chunksRef = React.useRef<Blob[]>([]);
++  const [mode, setMode] = useState<"audio" | "video">("video");
++  const [facing, setFacing] = useState<"user" | "environment">("environment");
++  const [active, setActive] = useState(false);
++  const [previewReady, setPreviewReady] = useState(false);
++  const [status, setStatus] = useState("Ready");
++  const [error, setError] = useState("");
++  const [items, setItems] = useState<LocalRecording[]>([]);
++  const [zoom, setZoom] = useState(1);
++  const [zoomRange, setZoomRange] = useState<{ min: number; max: number; step: number } | null>(null);
++
++  const refreshItems = useCallback(async () => {
++    try { setItems(await loadLocalRecordings()); }
++    catch (e) { setError(e instanceof Error ? e.message : "Unable to load local recordings"); }
++  }, []);
++
++  useEffect(() => { void refreshItems(); }, [refreshItems]);
++
++  const stopStream = useCallback(() => {
++    streamRef.current?.getTracks().forEach((track) => track.stop());
++    streamRef.current = null;
++    if (previewRef.current) previewRef.current.srcObject = null;
++    setZoomRange(null);
++    setZoom(1);
++    setPreviewReady(false);
++  }, []);
++
++  async function start(modeToStart: "audio" | "video" = mode, facingToUse = facing) {
++    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
++      setError("This browser does not support camera or microphone recording.");
++      return;
++    }
++    setError("");
++    try {
++      let stream = streamRef.current;
++      const hasExpectedTracks = stream && (modeToStart === "audio"
++        ? stream.getAudioTracks().length > 0 && stream.getVideoTracks().length === 0
++        : stream.getVideoTracks().length > 0);
++      if (!hasExpectedTracks) {
++        stopStream();
++        stream = await navigator.mediaDevices.getUserMedia(
++          modeToStart === "audio"
++            ? { audio: true, video: false }
++            : {
++                audio: true,
++                video: { facingMode: { ideal: facingToUse }, width: { ideal: 1920 }, height: { ideal: 1080 } },
++              },
++        );
++        streamRef.current = stream;
++      }
++      if (!stream) {
++        throw new Error("Unable to start recording: media stream is unavailable.");
++      }
++      if (previewRef.current && modeToStart === "video") {
++        previewRef.current.srcObject = stream;
++        await previewRef.current.play().catch(() => undefined);
++      }
++      if (modeToStart === "video") {
++        const track = stream.getVideoTracks()[0];
++        const caps = track?.getCapabilities?.() as MediaTrackCapabilities & { zoom?: { min: number; max: number; step?: number } };
++        if (caps?.zoom) {
++          setZoomRange({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 });
++          setZoom(caps.zoom.min);
++        }
++      }
++      chunksRef.current = [];
++      const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "audio/webm;codecs=opus", "audio/webm"]
++        .find((candidate) => MediaRecorder.isTypeSupported(candidate) &&
++          (modeToStart === "video" ? candidate.startsWith("video/") : candidate.startsWith("audio/")));
++      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
++      recorderRef.current = recorder;
++      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
++      recorder.onerror = () => setError("The browser reported a recording error. Check device permissions and available storage.");
++      recorder.onstop = async () => {
++        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || (modeToStart === "video" ? "video/webm" : "audio/webm") });
++        chunksRef.current = [];
++        try {
++          if (blob.size > 0) {
++            const createdAt = Date.now();
++            const ext = blob.type.includes("mp4") ? "mp4" : "webm";
++            const item: LocalRecording = {
++              id: crypto.randomUUID(),
++              name: `web-${modeToStart}-${createdAt}.${ext}`,
++              mimeType: blob.type,
++              size: blob.size,
++              createdAt,
++              blob,
++            };
++            await saveLocalRecording(item);
++            await refreshItems();
++            setStatus("Recording saved in this browser's local storage.");
++          } else {
++            setStatus("No recording data was produced.");
++          }
++        } catch (e) {
++          setError(e instanceof Error ? e.message : "Unable to save recording locally");
++          setStatus("Recording could not be saved.");
++        } finally {
++          stopStream();
++          setActive(false);
++          recorderRef.current = null;
++        }
++      };
++      recorder.start(1000);
++      setMode(modeToStart);
++      setActive(true);
++      setStatus(`${modeToStart === "video" ? "Video" : "Audio"} recording is active.`);
++    } catch (e) {
++      stopStream();
++      setError(e instanceof Error ? e.message : "Camera or microphone access was denied.");
++      setStatus("Not recording");
++    }
++  }
++
++  function stopRecording() {
++    if (recorderRef.current && recorderRef.current.state !== "inactive") {
++      setStatus("Finalizing recording…");
++      recorderRef.current.stop();
++    }
++  }
++
++  async function openCameraPreview() {
++    if (active || mode !== "video") return;
++    setError("");
++    try {
++      stopStream();
++      const stream = await navigator.mediaDevices.getUserMedia({
++        audio: true,
++        video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
++      });
++      streamRef.current = stream;
++      if (previewRef.current) {
++        previewRef.current.srcObject = stream;
++        await previewRef.current.play().catch(() => undefined);
++      }
++      const track = stream.getVideoTracks()[0];
++      const caps = track?.getCapabilities?.() as MediaTrackCapabilities & { zoom?: { min: number; max: number; step?: number } };
++      if (caps?.zoom) {
++        setZoomRange({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 });
++        setZoom(caps.zoom.min);
++      }
++      setPreviewReady(true);
++      setStatus("Camera preview ready. Start recording when you are ready.");
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "Unable to open camera preview.");
++    }
++  }
++
++  async function switchCamera() {
++    if (active || mode !== "video") return;
++    const next = facing === "environment" ? "user" : "environment";
++    setFacing(next);
++    stopStream();
++    setError("");
++    try {
++      const stream = await navigator.mediaDevices.getUserMedia({
++        audio: true,
++        video: { facingMode: { ideal: next }, width: { ideal: 1920 }, height: { ideal: 1080 } },
++      });
++      streamRef.current = stream;
++      if (previewRef.current) {
++        previewRef.current.srcObject = stream;
++        await previewRef.current.play().catch(() => undefined);
++      }
++      const caps = stream.getVideoTracks()[0]?.getCapabilities?.() as MediaTrackCapabilities & { zoom?: { min: number; max: number; step?: number } };
++      setZoomRange(caps?.zoom ? { min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 } : null);
++      setZoom(caps?.zoom?.min || 1);
++      setPreviewReady(true);
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "Unable to switch camera.");
++    }
++  }
++
++  async function changeZoom(next: number) {
++    const track = streamRef.current?.getVideoTracks()[0];
++    if (!track || !zoomRange) return;
++    try {
++      await track.applyConstraints({ advanced: [{ zoom: Math.min(zoomRange.max, Math.max(zoomRange.min, next)) } as unknown as MediaTrackConstraintSet] });
++      setZoom(next);
++    } catch {
++      setError("Zoom is not supported by this camera. Try another camera or device.");
++    }
++  }
++
++  async function downloadItem(item: LocalRecording) {
++    const url = URL.createObjectURL(item.blob);
++    const anchor = document.createElement("a");
++    anchor.href = url;
++    anchor.download = item.name;
++    anchor.click();
++    URL.revokeObjectURL(url);
++  }
++
++  async function removeItem(item: LocalRecording) {
++    if (!window.confirm(`Delete ${item.name} from this browser's local recordings?`)) return;
++    try { await deleteLocalRecording(item.id); await refreshItems(); }
++    catch (e) { setError(e instanceof Error ? e.message : "Unable to delete local recording"); }
++  }
++
++  useEffect(() => () => {
++    if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
++    else stopStream();
++  }, [stopStream]);
++
++  return (
++    <section className="hp-panel hp-recorder">
++      <div className="hp-section-heading">
++        <div><p className="hp-eyebrow">WEB APP RECORDING</p><h2>Local voice & video recorder</h2></div>
++        <span className="hp-count">Browser storage</span>
++      </div>
++      <p className="hp-footnote">Recordings started here stay in this browser's IndexedDB. They are separate from recordings uploaded by the Calculator app. Camera and microphone permissions are required.</p>
++      <div className="hp-recorder-grid">
++        <div>
++          <video ref={previewRef} className="hp-camera-preview" playsInline muted autoPlay />
++          <div className="hp-recorder-controls">
++            <button className="hp-button hp-secondary" disabled={active || mode !== "video"} onClick={() => void openCameraPreview()}>Open camera preview</button>
++            <button className="hp-button hp-secondary" disabled={active || !previewReady || mode !== "video"} onClick={() => void switchCamera()}>Switch front / back</button>
++            <button className="hp-button hp-secondary" disabled={active || mode !== "video" || !zoomRange || zoom <= zoomRange.min} onClick={() => void changeZoom(Math.max(zoomRange?.min || 1, zoom - (zoomRange?.step || 0.1)))}>Zoom −</button>
++            <button className="hp-button hp-secondary" disabled={active || mode !== "video" || !zoomRange || zoom >= zoomRange.max} onClick={() => void changeZoom(Math.min(zoomRange?.max || 1, zoom + (zoomRange?.step || 0.1)))}>Zoom +</button>
++          </div>
++        </div>
++        <div className="hp-recorder-actions">
++          <label htmlFor="hp-record-mode">Recording type</label>
++          <select id="hp-record-mode" value={mode} disabled={active} onChange={(e) => setMode(e.target.value as "audio" | "video")}>
++            <option value="video">Video</option><option value="audio">Voice only</option>
++          </select>
++          <div className="hp-recorder-controls">
++            <button className="hp-button hp-primary" disabled={active} onClick={() => void start(mode)}>Start recording</button>
++            <button className="hp-button hp-danger" disabled={!active} onClick={stopRecording}>Stop & save</button>
++          </div>
++          <p className="hp-recorder-status" role="status">{status}</p>
++          {error && <p className="hp-alert hp-error" role="alert">{error}</p>}
++          <p className="hp-footnote">Zoom controls appear only when the selected camera exposes hardware zoom. Browser support and available camera controls vary by device.</p>
++        </div>
++      </div>
++      <div className="hp-section-heading hp-recordings-heading"><h2>Saved in this browser</h2><span className="hp-count">{items.length}</span></div>
++      {items.length === 0 ? <div className="hp-empty">No Web App recordings saved in this browser.</div> : (
++        <div className="hp-list">
++          {items.map((item) => (
++            <article className="hp-device" key={item.id}>
++              <div className="hp-device-main"><strong>{item.name}</strong><span>{new Date(item.createdAt).toLocaleString()} · {(item.size / (1024 * 1024)).toFixed(1)} MB</span></div>
++              <div className="hp-actions">
++                <button className="hp-button hp-secondary" onClick={() => void downloadItem(item)}>Download</button>
++                <button className="hp-button hp-danger" onClick={() => void removeItem(item)}>Delete</button>
++              </div>
++            </article>
++          ))}
++        </div>
++      )}
++    </section>
++  );
++}
++
++
+ function App() {
+   const [token, setToken] = useState(() => {
+     try { return sessionStorage.getItem("hp-admin-session") || ""; }
+@@ -202,6 +522,8 @@ function App() {
+       {error && <p className="hp-alert hp-error" role="alert">{error}</p>}
+       {notice && <p className="hp-alert hp-success" role="status">{notice}</p>}
+ 
++      <WebRecorder />
++
+       <section className="hp-stats">
+         <article className="hp-stat"><span>Pending approvals</span><strong>{pending.length}</strong></article>
+         <article className="hp-stat"><span>Authorized devices</span><strong>{devices.filter((d) => !d.revoked).length}</strong></article>

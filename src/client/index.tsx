@@ -367,6 +367,383 @@ function WebRecorder() {
 }
 
 
+
+function RemotePhoneMedia({ token, devices }: {
+  token: string;
+  devices: Device[];
+}) {
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [phonePresent, setPhonePresent] = useState(false);
+  const [status, setStatus] = useState("Not connected");
+  const [mediaStatus, setMediaStatus] = useState("No active request");
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const wsRef = React.useRef<WebSocket | null>(null);
+  const pcRef = React.useRef<RTCPeerConnection | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const candidatesRef = React.useRef<RTCIceCandidateInit[]>([]);
+  const requestsRef = React.useRef<Record<string, string>>({});
+
+  const availableDevices = devices.filter((d) => !d.revoked);
+
+  useEffect(() => {
+    if (!availableDevices.some((d) => d.deviceId === selectedDeviceId)) {
+      setSelectedDeviceId(
+        availableDevices.find((d) => d.online)?.deviceId ||
+        availableDevices[0]?.deviceId || ""
+      );
+    }
+  }, [devices, selectedDeviceId]);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = remoteStream;
+    if (audioRef.current) audioRef.current.srcObject = remoteStream;
+  }, [remoteStream]);
+
+  function sendSignal(message: Record<string, unknown>) {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setStatus("WebSocket is not connected");
+      return false;
+    }
+    ws.send(JSON.stringify(message));
+    return true;
+  }
+
+  function closePeer() {
+    if (pcRef.current) {
+      pcRef.current.onicecandidate = null;
+      pcRef.current.ontrack = null;
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    candidatesRef.current = [];
+    setRemoteStream(null);
+  }
+
+  function disconnect() {
+    for (const requestId of Object.keys(requestsRef.current)) {
+      sendSignal({ type: "media-stop", requestId });
+    }
+    requestsRef.current = {};
+    closePeer();
+
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws) {
+      ws.onclose = null;
+      ws.close(1000, "Controller disconnected");
+    }
+    setConnected(false);
+    setPhonePresent(false);
+    setStatus("Disconnected");
+    setMediaStatus("No active request");
+  }
+
+  function getPeerConnection() {
+    if (pcRef.current) return pcRef.current;
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        sendSignal({
+          type: "candidate",
+          candidate: event.candidate.toJSON(),
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      let stream = event.streams[0];
+      if (!stream) {
+        stream = new MediaStream();
+        stream.addTrack(event.track);
+      }
+      setRemoteStream((current) => {
+        if (current && stream.id !== current.id) {
+          for (const track of stream.getTracks()) {
+            if (!current.getTracks().some((item) => item.id === track.id)) {
+              current.addTrack(track);
+            }
+          }
+          return current;
+        }
+        return stream;
+      });
+      setMediaStatus("Live stream received");
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") {
+        setMediaStatus("Media connection active");
+      } else if (pc.connectionState === "failed") {
+        setMediaStatus("Connection failed. A TURN server may be required.");
+      } else if (pc.connectionState === "disconnected") {
+        setMediaStatus("Media connection interrupted");
+      }
+    };
+
+    pcRef.current = pc;
+    return pc;
+  }
+
+  async function connect() {
+    if (!selectedDeviceId) {
+      setStatus("Select an authorized phone first");
+      return;
+    }
+
+    disconnect();
+    setStatus("Requesting secure connection ticket…");
+
+    try {
+      const result = await api<{ ticket: string }>(
+        "ws-ticket/controller",
+        token,
+        { deviceId: selectedDeviceId }
+      );
+
+      const url = new URL("/ws", window.location.href);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.searchParams.set("ticket", result.ticket);
+
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+      setStatus("Connecting to phone…");
+
+      ws.onopen = () => {
+        setConnected(true);
+        setStatus("Secure signaling connection established");
+      };
+
+      ws.onmessage = async (event) => {
+        let data: any;
+        try {
+          data = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+
+        if (data.type === "joined") {
+          setStatus("Controller connected. Waiting for phone…");
+        } else if (data.type === "peer-present" || data.type === "peer-joined") {
+          setPhonePresent(true);
+          setStatus("Phone connected and ready");
+        } else if (data.type === "peer-left") {
+          setPhonePresent(false);
+          closePeer();
+          setStatus("Phone disconnected");
+        } else if (data.type === "media-status") {
+          const labels: Record<string, string> = {
+            "approval-required": "Waiting for approval on phone",
+            approved: "Permission approved",
+            denied: "Permission denied on phone",
+            starting: "Starting phone media…",
+            active: "Phone media active",
+            stopped: "Phone media stopped",
+            error: data.message || "Phone media error",
+          };
+          setMediaStatus(labels[data.status] || data.status || "Unknown status");
+          if (data.status === "stopped" || data.status === "denied" || data.status === "error") {
+            if (data.requestId) delete requestsRef.current[data.requestId];
+          }
+        } else if (data.type === "offer") {
+          try {
+            const pc = getPeerConnection();
+            await pc.setRemoteDescription({
+              type: "offer",
+              sdp: typeof data.sdp === "string" ? data.sdp : data.sdp?.sdp,
+            });
+
+            for (const candidate of candidatesRef.current) {
+              await pc.addIceCandidate(candidate);
+            }
+            candidatesRef.current = [];
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            sendSignal({
+              type: "answer",
+              sdp: answer.sdp,
+            });
+            setMediaStatus("Negotiating live media connection…");
+          } catch (error) {
+            setMediaStatus(error instanceof Error ? error.message : "WebRTC negotiation failed");
+          }
+        } else if (data.type === "answer") {
+          try {
+            const pc = getPeerConnection();
+            await pc.setRemoteDescription({
+              type: "answer",
+              sdp: typeof data.sdp === "string" ? data.sdp : data.sdp?.sdp,
+            });
+          } catch {
+            setMediaStatus("Unable to apply phone answer");
+          }
+        } else if (data.type === "candidate") {
+          const candidate = typeof data.candidate === "string"
+            ? { candidate: data.candidate }
+            : data.candidate;
+          if (candidate && pcRef.current) {
+            if (pcRef.current.remoteDescription) {
+              try {
+                await pcRef.current.addIceCandidate(candidate);
+              } catch {
+                setMediaStatus("Unable to add network candidate");
+              }
+            } else {
+              candidatesRef.current.push(candidate);
+            }
+          }
+        }
+      };
+
+      ws.onerror = () => setStatus("WebSocket connection error");
+      ws.onclose = () => {
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+          closePeer();
+          setConnected(false);
+          setPhonePresent(false);
+          setStatus("Connection closed");
+        }
+      };
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to connect");
+    }
+  }
+
+  function requestMedia(media: "audio" | "video") {
+    if (!connected || !phonePresent) {
+      setMediaStatus("Connect the phone before requesting media");
+      return;
+    }
+
+    const requestId = crypto.randomUUID();
+    if (sendSignal({ type: "media-request", media, requestId })) {
+      requestsRef.current[requestId] = media;
+      setMediaStatus(
+        media === "video"
+          ? "Camera request sent. Approve it on the phone."
+          : "Microphone request sent. Approve it on the phone."
+      );
+    }
+  }
+
+  function stopMedia() {
+    for (const requestId of Object.keys(requestsRef.current)) {
+      sendSignal({ type: "media-stop", requestId });
+    }
+    requestsRef.current = {};
+    closePeer();
+    setMediaStatus("Stop request sent to phone");
+  }
+
+  useEffect(() => {
+    return () => {
+      const ws = wsRef.current;
+      if (ws) ws.close();
+      closePeer();
+    };
+  }, []);
+
+  return (
+    <section className="hp-panel">
+      <div className="hp-section-heading">
+        <div>
+          <p className="hp-eyebrow">ANDROID REMOTE MEDIA</p>
+          <h2>Phone Camera &amp; Microphone</h2>
+        </div>
+        <span className={phonePresent ? "hp-status hp-status-on" : "hp-status hp-status-off"}>
+          {phonePresent ? "Phone connected" : "Phone unavailable"}
+        </span>
+      </div>
+
+      <label htmlFor="remote-phone">Select authorized phone</label>
+      <select
+        id="remote-phone"
+        className="hp-input"
+        value={selectedDeviceId}
+        onChange={(event) => setSelectedDeviceId(event.target.value)}
+        disabled={connected}
+      >
+        <option value="">Select a phone</option>
+        {availableDevices.map((device) => (
+          <option key={device.deviceId} value={device.deviceId}>
+            {device.label || "Android phone"} — {device.deviceId}
+            {device.online ? " (Online)" : " (Offline)"}
+          </option>
+        ))}
+      </select>
+
+      <p className="hp-muted" role="status">{status}</p>
+
+      <div className="hp-actions">
+        {!connected ? (
+          <button
+            className="hp-button hp-primary"
+            onClick={() => void connect()}
+            disabled={!selectedDeviceId}
+          >
+            Connect to phone
+          </button>
+        ) : (
+          <button className="hp-button hp-secondary" onClick={disconnect}>
+            Disconnect
+          </button>
+        )}
+      </div>
+
+      <div className="hp-actions">
+        <button
+          className="hp-button hp-primary"
+          disabled={!connected || !phonePresent}
+          onClick={() => requestMedia("video")}
+        >
+          Start Camera
+        </button>
+        <button
+          className="hp-button hp-primary"
+          disabled={!connected || !phonePresent}
+          onClick={() => requestMedia("audio")}
+        >
+          Start Microphone
+        </button>
+        <button
+          className="hp-button hp-danger"
+          disabled={!connected || Object.keys(requestsRef.current).length === 0}
+          onClick={stopMedia}
+        >
+          Stop
+        </button>
+      </div>
+
+      <p className="hp-muted" role="status">{mediaStatus}</p>
+
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        controls
+        className="hp-remote-preview"
+        aria-label="Remote Android phone video"
+      />
+      <audio ref={audioRef} autoPlay controls aria-label="Remote Android phone audio" />
+
+      <p className="hp-footnote">
+        Camera and microphone access must be approved on the Android phone.
+        The phone must show its required recording indicators. Remember Permission
+        is managed on the phone and cannot bypass Android system permissions.
+        Live streaming may require a TURN server on restrictive networks.
+      </p>
+    </section>
+  );
+}
+
 function App() {
   const [token, setToken] = useState(() => {
     try { return sessionStorage.getItem("hp-admin-session") || ""; }
@@ -523,6 +900,7 @@ function App() {
       {notice && <p className="hp-alert hp-success" role="status">{notice}</p>}
 
       <WebRecorder />
+      <RemotePhoneMedia token={token} devices={devices} />
 
       <section className="hp-stats">
         <article className="hp-stat"><span>Pending approvals</span><strong>{pending.length}</strong></article>
